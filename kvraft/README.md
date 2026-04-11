@@ -1,0 +1,1 @@
+protoc --go_out=. --go_opt=module=kvraft --go-grpc_out=. --go-grpc_opt=module=kvraft proto/raft.proto proto/kv.proto
