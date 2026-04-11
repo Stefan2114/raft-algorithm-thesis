@@ -9,10 +9,12 @@ import (
 	"time"
 
 	"kvraft/raftapi"
+	"go.uber.org/zap"
 )
 
 type Raft struct {
 	mu        sync.RWMutex
+	logger    *zap.Logger
 	peers     []Transport
 	persister Persister
 	me        int
@@ -40,7 +42,7 @@ type Raft struct {
 }
 
 func Make(peers []Transport, me int,
-	persister Persister, applyCh chan raftapi.ApplyMsg) raftapi.Raft {
+	persister Persister, applyCh chan raftapi.ApplyMsg, logger *zap.Logger) raftapi.Raft {
 
 	rf := &Raft{
 		peers:          peers,
@@ -57,6 +59,7 @@ func Make(peers []Transport, me int,
 		matchIndex:     make([]int, len(peers)),
 		heartBeatTimer: time.NewTimer(StableHeartbeatTimeout()),
 		electionTimer:  time.NewTimer(RandomizedElectionTimeout()),
+		logger:         logger.With(zap.Int("node", me)),
 	}
 
 	for i := range peers {
@@ -108,7 +111,7 @@ func (rf *Raft) Start(command interface{}) (int, int, bool) {
 	}
 	rf.logs = append(rf.logs, entry)
 	rf.persist()
-	DPrintf("{Node %v} receives a new command(index: %v, term: %v) to replicate in term %v", rf.me, newIndex, newTerm, rf.currentTerm)
+	rf.logger.Debug("received new command", zap.Int("index", newIndex), zap.Int("term", newTerm))
 	rf.signalBroadcastReplication(false)
 	return newIndex, newTerm, true
 }
@@ -344,8 +347,13 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	defer DPrintf("{Node %v}'s state is {state %v,term %v,commitIndex %v,lastApplied %v,firstLog %v,lastLog %v} before processing requestVoteRequest %v and reply requestVoteResponse %v",
-		rf.me, rf.state, rf.currentTerm, rf.commitIndex, rf.lastApplied, rf.getFirstLog(), rf.getLastLog(), args, reply)
+	defer func() {
+		rf.logger.Debug("requestVote finished",
+			zap.String("state", rf.state.String()),
+			zap.Int("term", rf.currentTerm),
+			zap.Int("commitIndex", rf.commitIndex),
+			zap.Bool("voteGranted", reply.VoteGranted))
+	}()
 
 	reply.Term, reply.VoteGranted = rf.currentTerm, false
 
@@ -376,8 +384,13 @@ func (rf *Raft) sendRequestVote(server int, args *RequestVoteArgs, reply *Reques
 func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply) {
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
-	defer DPrintf("{Node %v}'s state is {state %v,term %v,commitIndex %v,lastApplied %v} before processing AppendEntriesArgs %v and reply AppendEntriesReply %v",
-		rf.me, rf.state, rf.currentTerm, rf.commitIndex, rf.lastApplied, args, reply)
+	defer func() {
+		rf.logger.Debug("appendEntries finished",
+			zap.String("state", rf.state.String()),
+			zap.Int("term", rf.currentTerm),
+			zap.Int("commitIndex", rf.commitIndex),
+			zap.Bool("success", reply.Success))
+	}()
 
 	reply.Term, reply.Success = rf.currentTerm, false
 
@@ -471,7 +484,7 @@ func (rf *Raft) startElection() {
 	rf.persist()
 
 	args := rf.genRequestVoteArgs()
-	DPrintf("{Node %v} starts election with RequestVoteRequest %v", rf.me, args)
+	rf.logger.Info("starting election", zap.Int("term", rf.currentTerm))
 
 	grantedVotes := 1
 
@@ -493,23 +506,21 @@ func (rf *Raft) requestVoteFromPeer(peer int, args *RequestVoteArgs, grantedVote
 	rf.mu.Lock()
 	defer rf.mu.Unlock()
 
-	DPrintf("{Node %v} receives RequestVoteResponse %v from {Node %v} after sending RequestVoteRequest %v in term %v",
-		rf.me, reply, peer, args, rf.currentTerm)
+	rf.logger.Debug("received RequestVoteResponse", zap.Int("peer", peer), zap.Bool("granted", reply.VoteGranted))
 
 	if !rf.isStillValidCandidate(args.Term) {
 		return
 	}
 
 	if isHigher := rf.handleHigherTerm(reply.Term); isHigher {
-		DPrintf("{Node %v} finds a new leader {Node %v} with term %v and steps down in term %v",
-			rf.me, peer, reply.Term, rf.currentTerm)
+		rf.logger.Debug("found higher term, stepping down", zap.Int("term", reply.Term))
 		return
 	}
 
 	if reply.VoteGranted {
 		*grantedVotes++
 		if *grantedVotes == (len(rf.peers)/2 + 1) {
-			DPrintf("{Node %v} achieved majority in term %v", rf.me, rf.currentTerm)
+			rf.logger.Info("achieved majority, becoming leader", zap.Int("term", rf.currentTerm))
 			rf.becomeLeader()
 		}
 	}
@@ -647,8 +658,7 @@ func (rf *Raft) resolveConflict(peer int, args *AppendEntriesArgs, reply *Append
 			rf.nextIndex[peer] = reply.ConflictIndex
 		}
 	}
-	DPrintf("{Node %v} sets nextIndex[%v]=%v, leader lastIncludedIndex=%v",
-		rf.me, peer, rf.nextIndex[peer], rf.lastIncludedIndex)
+	rf.logger.Debug("resolved replication conflict", zap.Int("peer", peer), zap.Int("nextIndex", rf.nextIndex[peer]))
 	rf.signalReplication(peer)
 }
 
@@ -677,7 +687,7 @@ func (rf *Raft) updateCommitIndex() {
 				panic("Shouldn't get here") // TODO Ignore
 			}
 			rf.commitIndex = n
-			DPrintf("{Node %v} commitIndex advanced to %v in term %v", rf.me, rf.commitIndex, rf.currentTerm)
+			rf.logger.Debug("commitIndex advanced", zap.Int("index", rf.commitIndex))
 			rf.signalApplier()
 			break
 		}

@@ -10,6 +10,19 @@ const (
 	StateLeader    NodeState = 2
 )
 
+func (s NodeState) String() string {
+	switch s {
+	case StateFollower:
+		return "Follower"
+	case StateCandidate:
+		return "Candidate"
+	case StateLeader:
+		return "Leader"
+	default:
+		return "Unknown"
+	}
+}
+
 type Entry struct {
 	Index   int
 	Term    int

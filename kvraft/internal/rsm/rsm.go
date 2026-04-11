@@ -9,6 +9,7 @@ import (
 	"kvraft/api"
 	"kvraft/internal/raft"
 	"kvraft/raftapi"
+	"go.uber.org/zap"
 )
 
 var useRaftStateMachine bool // to plug in another raft besided raft1
@@ -51,6 +52,7 @@ type RSM struct {
 	sm           StateMachine
 	pending      map[int]*pendingEntry
 	lastApplied  int
+	logger       *zap.Logger
 }
 
 // servers[] contains the ports of the set of
@@ -68,21 +70,22 @@ type RSM struct {
 //
 // MakeRSM() must return quickly, so it should start goroutines for
 // any long-running work.
-func MakeRSM(servers []raft.Transport, me int, persister raft.Persister, maxRaftState int, sm StateMachine) *RSM {
+func MakeRSM(servers []raft.Transport, me int, persister raft.Persister, maxRaftState int, sm StateMachine, logger *zap.Logger) *RSM {
 	rsm := &RSM{
 		me:           me,
 		maxRaftState: maxRaftState,
 		applyCh:      make(chan raftapi.ApplyMsg),
 		sm:           sm,
 		pending:      make(map[int]*pendingEntry),
+		logger:       logger.With(zap.Int("node", me), zap.String("component", "rsm")),
 	}
 	if !useRaftStateMachine {
-		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh)
+		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh, logger)
 	}
 	if snapshot, _ := persister.ReadSnapshot(); len(snapshot) > 0 {
 		rsm.sm.Restore(snapshot)
 	}
-	raft.DPrintf("[RSM %d] MakeRSM maxRaftState=%d", me, maxRaftState)
+	rsm.logger.Info("RSM started", zap.Int("maxRaftState", maxRaftState))
 
 	go rsm.reader()
 	return rsm
@@ -108,7 +111,7 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 		return api.ErrWrongLeader, nil
 	}
 
-	raft.DPrintf("[RSM %d] Submit id=%s index=%d term=%d req=%T", rsm.me, id, index, term, req)
+	rsm.logger.Debug("command submitted", zap.String("id", id), zap.Int("index", index), zap.Int("term", term))
 	rsm.pending[index] = &pendingEntry{id: id, term: term, ch: ch}
 	rsm.mu.Unlock()
 
@@ -121,20 +124,20 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 	select {
 	case res, ok := <-ch:
 		if !ok {
-			raft.DPrintf("[RSM %d] Submit id=%s index=%d ch closed (shutdown)", rsm.me, id, index)
+			rsm.logger.Debug("submit failed: channel closed", zap.String("id", id), zap.Int("index", index))
 			return api.ErrWrongLeader, nil
 		}
 		if res.id != id {
-			raft.DPrintf("[RSM %d] Submit id=%s index=%d got wrong id=%s (leader changed)", rsm.me, id, index, res.id)
+			rsm.logger.Debug("submit failed: leader changed", zap.String("id", id), zap.Int("index", index), zap.String("actualId", res.id))
 			return api.ErrWrongLeader, nil
 		}
-		raft.DPrintf("[RSM %d] Submit id=%s index=%d SUCCESS", rsm.me, id, index)
+		rsm.logger.Debug("submit success", zap.String("id", id), zap.Int("index", index))
 		return api.OK, res.val
 	case <-time.After(10 * time.Second):
 		rsm.mu.Lock()
 		pending := rsm.dumpPending()
 		rsm.mu.Unlock()
-		raft.DPrintf("[RSM %d] Submit id=%s index=%d TIMEOUT STUCK - pending map: %v", rsm.me, id, index, pending)
+		rsm.logger.Warn("submit timeout", zap.String("id", id), zap.Int("index", index), zap.String("pending", pending))
 		return api.ErrWrongLeader, nil
 	}
 }
@@ -154,14 +157,14 @@ func (rsm *RSM) reader() {
 		} else if msg.CommandValid {
 			rsm.handleCommand(msg)
 		} else {
-			raft.DPrintf("[RSM %d] reader: invalid command msg", rsm.me)
+			rsm.logger.Error("reader: invalid command msg")
 		}
 	}
 	rsm.cleanup()
 }
 
 func (rsm *RSM) handleSnapshot(msg raftapi.ApplyMsg) {
-	raft.DPrintf("[RSM %d] reader: snapshot index=%d", rsm.me, msg.SnapshotIndex)
+	rsm.logger.Debug("reader: snapshot", zap.Int("index", msg.SnapshotIndex))
 	rsm.mu.Lock()
 	defer rsm.mu.Unlock()
 
@@ -180,16 +183,15 @@ func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 	op, ok := msg.Command.(Op)
 
 	if !ok {
-		raft.DPrintf("[RSM %d] reader: command not Op type: %T", rsm.me, msg.Command)
+		rsm.logger.Error("reader: command not Op type", zap.String("type", fmt.Sprintf("%T", msg.Command)))
 		return
 	}
 
-	raft.DPrintf("[RSM %d] reader: applying index=%d op.id=%s op.Me=%d", rsm.me, msg.CommandIndex, op.Id, op.Me)
+	rsm.logger.Debug("reader: applying", zap.Int("index", msg.CommandIndex), zap.String("id", op.Id))
 
 	rsm.mu.Lock()
 	if msg.CommandIndex <= rsm.lastApplied {
-		raft.DPrintf("[RSM %d] reader: discarding stale index=%d lastApplied=%d",
-			rsm.me, msg.CommandIndex, rsm.lastApplied)
+		rsm.logger.Debug("reader: discarding stale index", zap.Int("index", msg.CommandIndex), zap.Int("lastApplied", rsm.lastApplied))
 		rsm.mu.Unlock()
 		return
 	}
@@ -210,8 +212,7 @@ func (rsm *RSM) notifyPending(index int, id string, val any) {
 	entry, exists := rsm.pending[index]
 
 	if exists {
-		raft.DPrintf("[RSM %d] reader: notifying pending index=%d id=%s matches=%v",
-			rsm.me, index, id, entry.id == id)
+		rsm.logger.Debug("reader: notifying pending", zap.Int("index", index), zap.String("id", id), zap.Bool("matches", entry.id == id))
 		// Only succeed if we are still leader and the ID matches [cite: 135-136]
 		if isLeader && entry.id == id {
 			entry.ch <- result{id: id, val: val}
@@ -239,15 +240,14 @@ func (rsm *RSM) notifyOutdated(index int) {
 
 func (rsm *RSM) checkSnapshot(index int) {
 	if rsm.maxRaftState != -1 && rsm.rf.PersistBytes() >= rsm.maxRaftState {
-		raft.DPrintf("[RSM %d] taking snapshot at index=%d persistBytes=%d threshold=%d",
-			rsm.me, index, rsm.rf.PersistBytes(), rsm.maxRaftState)
+		rsm.logger.Info("taking snapshot", zap.Int("index", index), zap.Int("persistBytes", rsm.rf.PersistBytes()), zap.Int("threshold", rsm.maxRaftState))
 		snapshot := rsm.sm.Snapshot()
 		rsm.rf.Snapshot(index, snapshot)
 	}
 }
 
 func (rsm *RSM) cleanup() {
-	raft.DPrintf("[RSM %d] reader: applyCh closed, waking all pending", rsm.me)
+	rsm.logger.Info("reader: applyCh closed, waking all pending")
 	// applyCh closed: wake up all waiting Submit() calls
 	rsm.mu.Lock()
 	defer rsm.mu.Unlock()
