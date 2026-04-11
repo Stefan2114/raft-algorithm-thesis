@@ -1,0 +1,57 @@
+syntax = "proto3";
+
+package kvraft.raft.v1;
+
+option go_package = "kvraft/pb;kvpb";
+
+message RequestVoteArgs {
+  int32 term = 1;
+  int32 candidate_id = 2;
+  int32 last_log_term = 3;
+  int32 last_log_index = 4;
+}
+
+message RequestVoteReply {
+  int32 term = 1;
+  bool vote_granted = 2;
+}
+
+message LogEntry {
+  int32 index = 1;
+  int32 term = 2;
+  bytes command = 3;
+}
+
+message AppendEntriesArgs {
+  int32 term = 1;
+  int32 leader_id = 2;
+  int32 prev_log_index = 3;
+  int32 prev_log_term = 4;
+  repeated LogEntry entries = 5;
+  int32 leader_commit = 6;
+}
+
+message AppendEntriesReply {
+  int32 term = 1;
+  bool success = 2;
+  int32 conflict_index = 3;
+  int32 conflict_term = 4;
+}
+
+message InstallSnapshotArgs {
+  int32 term = 1;
+  int32 leader_id = 2;
+  int32 last_included_index = 3;
+  int32 last_included_term = 4;
+  bytes data = 5;
+}
+
+message InstallSnapshotReply {
+  int32 term = 1;
+}
+
+service Raft {
+  rpc RequestVote(RequestVoteArgs) returns (RequestVoteReply);
+  rpc AppendEntries(AppendEntriesArgs) returns (AppendEntriesReply);
+  rpc InstallSnapshot(InstallSnapshotArgs) returns (InstallSnapshotReply);
+}
