@@ -6,9 +6,11 @@
 *.so
 *.dylib
 
-# Main binary (replace 'app' with your project name if you prefer)
+# Main binary
 bin/
+.bin/
 app
+vendor/
 
 # --- Testing ---
 # Test coverage files
@@ -32,3 +34,6 @@ Thumbs.db
 # --- Environment/Secrets ---
 .env
 .env.local
+
+# --- Go specific ---
+go.work
