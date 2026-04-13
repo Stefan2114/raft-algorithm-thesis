@@ -9,6 +9,7 @@ import (
 	"kvraft/api"
 	"kvraft/internal/raft"
 	"kvraft/raftapi"
+
 	"go.uber.org/zap"
 )
 
@@ -168,7 +169,6 @@ func (rsm *RSM) handleSnapshot(msg raftapi.ApplyMsg) {
 	rsm.mu.Lock()
 	defer rsm.mu.Unlock()
 
-	// TODO see if i need this here
 	if msg.SnapshotIndex <= rsm.lastApplied {
 		panic("RSM got here ups")
 		return
