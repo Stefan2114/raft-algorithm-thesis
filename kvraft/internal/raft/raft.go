@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"kvraft/raftapi"
+
 	"go.uber.org/zap"
 )
 
@@ -120,19 +121,19 @@ func (rf *Raft) encodeState() []byte {
 	w := new(bytes.Buffer)
 	e := gob.NewEncoder(w)
 	if err := e.Encode(rf.currentTerm); err != nil {
-		panic(err)
+		rf.logger.Fatal("failed to encode state", zap.Error(err))
 	}
 	if err := e.Encode(rf.votedFor); err != nil {
-		panic(err)
+		rf.logger.Fatal("failed to encode state", zap.Error(err))
 	}
 	if err := e.Encode(rf.logs); err != nil {
-		panic(err)
+		rf.logger.Fatal("failed to encode state", zap.Error(err))
 	}
 	if err := e.Encode(rf.lastIncludedIndex); err != nil {
-		panic(err)
+		rf.logger.Fatal("failed to encode state", zap.Error(err))
 	}
 	if err := e.Encode(rf.lastIncludedTerm); err != nil {
-		panic(err)
+		rf.logger.Fatal("failed to encode state", zap.Error(err))
 	}
 	return w.Bytes()
 }
@@ -140,11 +141,17 @@ func (rf *Raft) encodeState() []byte {
 // save Raft's persistent state to stable storage
 func (rf *Raft) persist() {
 	snapshot, _ := rf.persister.ReadSnapshot()
-	rf.persister.Save(rf.encodeState(), snapshot)
+	err := rf.persister.Save(rf.encodeState(), snapshot)
+	if err != nil {
+		rf.logger.Fatal("failed to persist", zap.Error(err))
+	}
 }
 
 func (rf *Raft) readPersist(data []byte, err error) {
-	if data == nil || len(data) < 1 {
+	if err != nil {
+		rf.logger.Fatal("failed to read raft state from disk", zap.Error(err))
+	}
+	if len(data) < 1 {
 		return
 	}
 	r := bytes.NewBuffer(data)
@@ -153,19 +160,19 @@ func (rf *Raft) readPersist(data []byte, err error) {
 	var logs []Entry
 
 	if err := d.Decode(&currentTerm); err != nil {
-		panic(err)
+		rf.logger.Fatal("failed to decode state", zap.Error(err))
 	}
 	if err := d.Decode(&votedFor); err != nil {
-		panic(err)
+		rf.logger.Fatal("failed to decode state", zap.Error(err))
 	}
 	if err := d.Decode(&logs); err != nil {
-		panic(err)
+		rf.logger.Fatal("failed to decode state", zap.Error(err))
 	}
 	if err := d.Decode(&lastIncludedIndex); err != nil {
-		panic(err)
+		rf.logger.Fatal("failed to decode state", zap.Error(err))
 	}
 	if err := d.Decode(&lastIncludedTerm); err != nil {
-		panic(err)
+		rf.logger.Fatal("failed to decode state", zap.Error(err))
 	}
 	rf.currentTerm = currentTerm
 	rf.votedFor = votedFor
@@ -197,7 +204,10 @@ func (rf *Raft) Snapshot(index int, snapshot []byte) {
 	rf.logs = append([]Entry{}, rf.logs[rf.getPhysicalIndex(index):]...)
 	rf.lastIncludedIndex = index
 	rf.lastIncludedTerm = rf.getFirstLog().Term
-	rf.persister.Save(rf.encodeState(), snapshot)
+	err := rf.persister.Save(rf.encodeState(), snapshot)
+	if err != nil {
+		rf.logger.Fatal("failed to persist", zap.Error(err))
+	}
 }
 
 func (rf *Raft) ticker() {
@@ -261,7 +271,7 @@ func (rf *Raft) applier() {
 		copy(entries, rf.logs[pStart:pLimit+1])
 
 		if limit <= rf.lastApplied {
-			panic("Shouldn't get here 2") // TODO ignore
+			panic("Shouldn't get here 2")
 		}
 		rf.lastApplied = limit
 		rf.mu.Unlock()
@@ -611,7 +621,7 @@ func (rf *Raft) handleInstallSnapshotReply(peer int, args *InstallSnapshotArgs, 
 		if newMatch > rf.matchIndex[peer] {
 			rf.matchIndex[peer] = newMatch
 		}
-		rf.signalReplication(peer) // TODO added this
+		rf.signalReplication(peer)
 	}
 }
 
@@ -676,7 +686,7 @@ func (rf *Raft) advancePeerIndices(peer int, args *AppendEntriesArgs) {
 	if newMatch > rf.matchIndex[peer] {
 		rf.matchIndex[peer] = newMatch
 		rf.nextIndex[peer] = newMatch + 1
-		rf.signalReplication(peer) // TODO added this
+		rf.signalReplication(peer)
 	}
 }
 
@@ -684,7 +694,7 @@ func (rf *Raft) updateCommitIndex() {
 	for n := rf.getLen() - 1; n > rf.commitIndex; n-- {
 		if rf.getLog(n).Term == rf.currentTerm && rf.countNodesWithLogAt(n) > len(rf.peers)/2 {
 			if n <= rf.lastIncludedIndex {
-				panic("Shouldn't get here") // TODO Ignore
+				panic("Shouldn't get here")
 			}
 			rf.commitIndex = n
 			rf.logger.Debug("commitIndex advanced", zap.Int("index", rf.commitIndex))

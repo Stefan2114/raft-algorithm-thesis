@@ -27,13 +27,13 @@ func main() {
 
 	cfg, err := config.Load(*cfgPath)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 
 	node, err := kvserver.StartNode(cfg, *id, *dataDir, *maxRaftState)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
+		_, _ = fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 

@@ -13,7 +13,7 @@ func entriesToProto(entries []raft.Entry) ([]*kvpb.LogEntry, error) {
 	out := make([]*kvpb.LogEntry, len(entries))
 	for i := range entries {
 		var buf bytes.Buffer
-		if err := gob.NewEncoder(&buf).Encode(entries[i].Command); err != nil {
+		if err := gob.NewEncoder(&buf).Encode(&entries[i].Command); err != nil {
 			return nil, err
 		}
 		out[i] = &kvpb.LogEntry{
