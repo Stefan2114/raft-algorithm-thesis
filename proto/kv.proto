@@ -2,6 +2,9 @@ syntax = "proto3";
 
 package kvraft.kv.v1;
 
+option java_package = "com.kvraft.kv.v1";
+option java_multiple_files = true;
+option java_outer_classname = "KvProto";
 option go_package = "kvraft/pb;kvpb";
 
 enum Status {
