@@ -228,9 +228,9 @@ Found in `internal/raft/persister.go` and `persist/disk_persister.go`.
 ## Getting Started
 
 ### 1. Generate Proto Files
-If you modify the `.proto` files in the `proto/` directory, regenerate the Go code:
+If you modify the `.proto` files in the shared `proto/` directory at the project root, regenerate the Go code from the root:
 ```bash
-protoc --go_out=. --go_opt=module=kvraft --go-grpc_out=. --go-grpc_opt=module=kvraft proto/raft.proto proto/kv.proto
+protoc --go_out=kvraft --go_opt=module=kvraft --go-grpc_out=kvraft --go-grpc_opt=module=kvraft proto/raft.proto proto/kv.proto
 ```
 
 ### 2. Build and Run
