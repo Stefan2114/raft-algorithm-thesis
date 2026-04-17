@@ -3,7 +3,6 @@ package kvserver
 import (
 	"fmt"
 	"net"
-	"os"
 	"time"
 
 	"google.golang.org/grpc"
@@ -45,7 +44,7 @@ func dialPeer(addr string) (*grpc.ClientConn, error) {
 }
 
 // StartNode listens on the address of the node with the given config id and joins the cluster.
-func StartNode(cfg *config.Config, nodeID int, dataDir string, maxRaftState int) (*Node, error) {
+func StartNode(cfg *config.Config, nodeID int, dataDir string, maxRaftState int, isProd bool, isDebug bool, logPath string) (*Node, error) {
 	me := -1
 	for i, n := range cfg.Nodes {
 		if n.ID == nodeID {
@@ -81,8 +80,7 @@ func StartNode(cfg *config.Config, nodeID int, dataDir string, maxRaftState int)
 		transports[i] = &raftransport.GRPCClient{Raft: kvpb.NewRaftClient(conn)}
 	}
 
-	isProd := os.Getenv("APP_ENV") == "production"
-	raftLogger := logger.InitLogger(isProd)
+	raftLogger := logger.InitLogger(isProd, isDebug, logPath)
 
 	store := NewStore()
 	rsmInst := rsm.MakeRSM(transports, me, ps, maxRaftState, store, raftLogger)

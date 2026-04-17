@@ -11,7 +11,7 @@ import (
 // If isProduction is true, it uses JSON encoding.
 // Otherwise, it uses Console encoding (colorized).
 // Panics if initialization fails.
-func InitLogger(isProduction bool) *zap.Logger {
+func InitLogger(isProduction bool, isDebug bool, logPath string) *zap.Logger {
 	var config zap.Config
 
 	if isProduction {
@@ -23,10 +23,15 @@ func InitLogger(isProduction bool) *zap.Logger {
 		config.Encoding = "console"
 	}
 
-	// Set level based on environment variable
+	// Set level
 	level := zap.InfoLevel
-	if os.Getenv("RAFT_DEBUG") == "true" {
+	if isDebug || os.Getenv("RAFT_DEBUG") == "true" {
 		level = zap.DebugLevel
+	}
+
+	if logPath != "" {
+		config.OutputPaths = []string{"stderr", logPath}
+		config.ErrorOutputPaths = []string{"stderr", logPath}
 	}
 	config.Level = zap.NewAtomicLevelAt(level)
 
