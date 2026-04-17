@@ -242,5 +242,14 @@ go build -o kvcli ./cmd/cli
 
 To run a node:
 ```bash
-./kvserver --config cluster.json --id 1 --dir ./data/node1
+./kvserver --config config/cluster.json --id 1 --datadir ./data/node1
+```
+
+To use the client (clerk) CLI:
+```bash
+# Store a value
+./kvcli --config cluster.json put mykey myvalue
+
+# Retrieve a value
+./kvcli --config cluster.json get mykey
 ```

@@ -1,8 +1,9 @@
 package rsm
 
 import (
+	"crypto/rand"
+	"encoding/binary"
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -17,17 +18,17 @@ var useRaftStateMachine bool // to plug in another raft besided raft1
 
 type Op struct {
 	Me  int
-	Id  string // Unique ID to match Submit with the applied result
+	Id  int64 // Unique ID to match Submit with the applied result
 	Req any
 }
 
 type result struct {
-	id  string
+	id  int64
 	val any
 }
 
 type pendingEntry struct {
-	id   string
+	id   int64
 	term int
 	ch   chan result
 }
@@ -101,7 +102,7 @@ func (rsm *RSM) Raft() raftapi.Raft {
 // try again.
 func (rsm *RSM) Submit(req any) (api.Err, any) {
 
-	id := randValue(8)
+	id := randValue()
 	op := Op{Me: rsm.me, Id: id, Req: req}
 	ch := make(chan result)
 	rsm.mu.Lock()
@@ -112,7 +113,7 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 		return api.ErrWrongLeader, nil
 	}
 
-	rsm.logger.Debug("command submitted", zap.String("id", id), zap.Int("index", index), zap.Int("term", term))
+	rsm.logger.Debug("command submitted", zap.Int64("id", id), zap.Int("index", index), zap.Int("term", term))
 	rsm.pending[index] = &pendingEntry{id: id, term: term, ch: ch}
 	rsm.mu.Unlock()
 
@@ -125,20 +126,20 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 	select {
 	case res, ok := <-ch:
 		if !ok {
-			rsm.logger.Debug("submit failed: channel closed", zap.String("id", id), zap.Int("index", index))
+			rsm.logger.Debug("submit failed: channel closed", zap.Int64("id", id), zap.Int("index", index))
 			return api.ErrWrongLeader, nil
 		}
 		if res.id != id {
-			rsm.logger.Debug("submit failed: leader changed", zap.String("id", id), zap.Int("index", index), zap.String("actualId", res.id))
+			rsm.logger.Debug("submit failed: leader changed", zap.Int64("id", id), zap.Int("index", index), zap.Int64("actualId", res.id))
 			return api.ErrWrongLeader, nil
 		}
-		rsm.logger.Debug("submit success", zap.String("id", id), zap.Int("index", index))
+		rsm.logger.Debug("submit success", zap.Int64("id", id), zap.Int("index", index))
 		return api.OK, res.val
 	case <-time.After(10 * time.Second):
 		rsm.mu.Lock()
 		pending := rsm.dumpPending()
 		rsm.mu.Unlock()
-		rsm.logger.Warn("submit timeout", zap.String("id", id), zap.Int("index", index), zap.String("pending", pending))
+		rsm.logger.Warn("submit timeout", zap.Int64("id", id), zap.Int("index", index), zap.String("pending", pending))
 		return api.ErrWrongLeader, nil
 	}
 }
@@ -146,7 +147,7 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 func (rsm *RSM) dumpPending() string {
 	var s string
 	for idx, e := range rsm.pending {
-		s += fmt.Sprintf("idx=%d id=%s term=%d | ", idx, e.id, e.term)
+		s += fmt.Sprintf("idx=%d id=%d term=%d | ", idx, e.id, e.term)
 	}
 	return s
 }
@@ -187,7 +188,7 @@ func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 		return
 	}
 
-	rsm.logger.Debug("reader: applying", zap.Int("index", msg.CommandIndex), zap.String("id", op.Id))
+	rsm.logger.Debug("reader: applying", zap.Int("index", msg.CommandIndex), zap.Int64("id", op.Id))
 
 	rsm.mu.Lock()
 	if msg.CommandIndex <= rsm.lastApplied {
@@ -207,17 +208,17 @@ func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 	rsm.mu.Unlock()
 }
 
-func (rsm *RSM) notifyPending(index int, id string, val any) {
+func (rsm *RSM) notifyPending(index int, id int64, val any) {
 	_, isLeader := rsm.rf.GetState()
 	entry, exists := rsm.pending[index]
 
 	if exists {
-		rsm.logger.Debug("reader: notifying pending", zap.Int("index", index), zap.String("id", id), zap.Bool("matches", entry.id == id))
+		rsm.logger.Debug("reader: notifying pending", zap.Int("index", index), zap.Int64("id", id), zap.Bool("matches", entry.id == id))
 		// Only succeed if we are still leader and the ID matches [cite: 135-136]
 		if isLeader && entry.id == id {
 			entry.ch <- result{id: id, val: val}
 		} else {
-			entry.ch <- result{id: ""} // Forces client retry
+			entry.ch <- result{id: -1} // Forces client retry
 		}
 		delete(rsm.pending, index)
 	}
@@ -232,7 +233,7 @@ func (rsm *RSM) notifyOutdated(index int) {
 			if !isLeader && entry.term == currentTerm {
 				panic("Got here ups2")
 			}
-			entry.ch <- result{id: ""}
+			entry.ch <- result{id: -1}
 			delete(rsm.pending, idx)
 		}
 	}
@@ -257,12 +258,8 @@ func (rsm *RSM) cleanup() {
 	rsm.pending = make(map[int]*pendingEntry)
 }
 
-func randValue(n int) string {
-	const letterBytes = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-
-	b := make([]byte, n)
-	for i := range b {
-		b[i] = letterBytes[rand.Int63()%int64(len(letterBytes))]
-	}
-	return string(b)
+func randValue() int64 {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return int64(binary.BigEndian.Uint64(b[:]))
 }
