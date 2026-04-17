@@ -37,3 +37,11 @@ Thumbs.db
 
 # --- Go specific ---
 go.work
+
+# --- Custom App Runtime ---
+/.cluster.pids
+/data/
+/logs/
+/*.log
+/kvserver
+/kvcli

@@ -240,16 +240,21 @@ go build -o kvserver ./cmd/kvserver
 go build -o kvcli ./cmd/cli
 ```
 
-To run a node:
+To run the cluster (starts 3 nodes automatically in background):
 ```bash
-./kvserver --config config/cluster.json --id 1 --datadir ./data/node1
+./start-cluster.sh --nodes 3 --clean
 ```
 
-To use the client (clerk) CLI:
+To use the Go client (clerk) CLI:
 ```bash
 # Store a value
-./kvcli --config cluster.json put mykey myvalue
+./kvcli --config ../cluster.json put mykey myvalue
 
 # Retrieve a value
-./kvcli --config cluster.json get mykey
+./kvcli --config ../cluster.json get mykey
+```
+
+When you are finished testing, cleanly shut down the background processes:
+```bash
+./stop-cluster.sh
 ```
