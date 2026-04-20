@@ -118,7 +118,9 @@ When you are finished testing, cleanly shut down the background processes:
 
 ## Design Patterns
 
-TODO!!!
+- Creational: Static Factory Pattern
+- Structural: Adapter Pattern
+- Behavioral: Command Pattern, Observer Pattern, Strategy Pattern
 
 ### Static Factory Pattern
 
