@@ -35,7 +35,11 @@ func (s *KVService) Get(ctx context.Context, req *kvpb.GetRequest) (*kvpb.GetRes
 	_ = ctx
 	code, val := s.RSM.Submit(api.GetArgs{Key: req.Key})
 	if code == api.ErrWrongLeader {
-		return &kvpb.GetResponse{Status: errToStatus(code)}, nil
+		var leaderHint int32 = -1
+		if leader, ok := val.(int); ok {
+			leaderHint = int32(leader)
+		}
+		return &kvpb.GetResponse{Status: errToStatus(code), LeaderHint: leaderHint}, nil
 	}
 	gr, ok := val.(api.GetReply)
 	if !ok {
@@ -56,7 +60,11 @@ func (s *KVService) Put(ctx context.Context, req *kvpb.PutRequest) (*kvpb.PutRes
 		Version: api.TVersion(req.Version),
 	})
 	if code == api.ErrWrongLeader {
-		return &kvpb.PutResponse{Status: errToStatus(code)}, nil
+		var leaderHint int32 = -1
+		if leader, ok := val.(int); ok {
+			leaderHint = int32(leader)
+		}
+		return &kvpb.PutResponse{Status: errToStatus(code), LeaderHint: leaderHint}, nil
 	}
 	pr, ok := val.(api.PutReply)
 	if !ok {

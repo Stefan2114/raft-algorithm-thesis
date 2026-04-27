@@ -82,9 +82,15 @@ func (ck *Clerk) Get(key string) (string, api.TVersion, api.Err) {
 			return resp.Value, api.TVersion(resp.Version), pbStatusToErr(resp.Status)
 		}
 		tried++
-		srv = (srv + 1) % len(ck.clients)
-		if tried%len(ck.clients) == 0 {
+		if err == nil && resp != nil && resp.LeaderHint >= 0 && int(resp.LeaderHint) < len(ck.clients) && int(resp.LeaderHint) != srv {
+			srv = int(resp.LeaderHint)
+		} else {
+			srv = (srv + 1) % len(ck.clients)
+		}
+		
+		if tried >= len(ck.clients) {
 			time.Sleep(20 * time.Millisecond)
+			tried = 0
 		}
 	}
 }
@@ -122,9 +128,15 @@ func (ck *Clerk) Put(key string, value string, version api.TVersion) api.Err {
 			firstAttempt = false
 		}
 		tried++
-		srv = (srv + 1) % len(ck.clients)
-		if tried%len(ck.clients) == 0 {
+		if err == nil && resp != nil && resp.LeaderHint >= 0 && int(resp.LeaderHint) < len(ck.clients) && int(resp.LeaderHint) != srv {
+			srv = int(resp.LeaderHint)
+		} else {
+			srv = (srv + 1) % len(ck.clients)
+		}
+		
+		if tried >= len(ck.clients) {
 			time.Sleep(20 * time.Millisecond)
+			tried = 0
 		}
 	}
 }

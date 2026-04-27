@@ -2,6 +2,7 @@ package config
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"sort"
 )
@@ -24,6 +25,14 @@ func Load(path string) (*Config, error) {
 	if err := json.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+	
+	if len(cfg.Nodes) < 3 {
+		return nil, fmt.Errorf("cluster must have at least 3 nodes, got %d", len(cfg.Nodes))
+	}
+	if len(cfg.Nodes)%2 == 0 {
+		return nil, fmt.Errorf("cluster must have an odd number of nodes, got %d", len(cfg.Nodes))
+	}
+
 	sort.Slice(cfg.Nodes, func(i, j int) bool { return cfg.Nodes[i].ID < cfg.Nodes[j].ID })
 	return &cfg, nil
 }

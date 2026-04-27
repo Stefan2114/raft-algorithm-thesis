@@ -15,6 +15,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
+import javax.annotation.Nonnull;
+
 /**
  * An industry-standard, asynchronous gRPC client for the KVRaft cluster.
  */
@@ -46,7 +48,7 @@ public class Clerk implements AutoCloseable {
                 .setKey(key)
                 .build();
 
-        return callWithRetry(stub -> stub.get(request), 0)
+        return callWithRetry(stub -> stub.get(request), lastLeader.get(), 0)
                 .thenApply(resp -> {
                     if (resp.getStatus() == Status.OK) {
                         return new GetResult(resp.getValue(), resp.getVersion());
@@ -67,7 +69,7 @@ public class Clerk implements AutoCloseable {
                 .setVersion(version)
                 .build();
 
-        return callWithRetry(stub -> stub.put(request), 0)
+        return callWithRetry(stub -> stub.put(request), lastLeader.get(), 0)
                 .thenAccept(resp -> {
                     if (resp.getStatus() != Status.OK) {
                         throw KVRaftException.fromStatus(resp.getStatus());
@@ -78,20 +80,20 @@ public class Clerk implements AutoCloseable {
     /**
      * Internal retry mechanism for finding the leader and handling network blips.
      */
-    private <T> CompletableFuture<T> callWithRetry(Function<KVGrpc.KVFutureStub, ListenableFuture<T>> rpcCall, int attempt) {
+    private <T> CompletableFuture<T> callWithRetry(Function<KVGrpc.KVFutureStub, ListenableFuture<T>> rpcCall, int serverIndex, int attempt) {
         CompletableFuture<T> result = new CompletableFuture<>();
-        int serverIndex = (lastLeader.get() + attempt) % totalNodes;
         KVGrpc.KVFutureStub stub = stubs.get(serverIndex);
 
         ListenableFuture<T> future = rpcCall.apply(stub.withDeadlineAfter(5, TimeUnit.SECONDS));
 
         Futures.addCallback(future, new FutureCallback<T>() {
             @Override
-            public void onSuccess(T response) {
+            public void onSuccess(@Nonnull T response) {
                 Status status = getStatusFromResponse(response);
 
                 if (status == Status.ERR_WRONG_LEADER) {
-                    retry();
+                    int hint = getLeaderHintFromResponse(response);
+                    retry(hint >= 0 && hint < totalNodes && hint != serverIndex ? hint : (serverIndex + 1) % totalNodes);
                 } else {
                     lastLeader.set(serverIndex);
                     result.complete(response);
@@ -99,15 +101,15 @@ public class Clerk implements AutoCloseable {
             }
 
             @Override
-            public void onFailure(Throwable t) {
-                retry();
+            public void onFailure(@Nonnull Throwable t) {
+                retry((serverIndex + 1) % totalNodes);
             }
 
-            private void retry() {
+            private void retry(int nextServerIndex) {
                 if (attempt > 0 && attempt % totalNodes == 0) {
                     try { Thread.sleep(50); } catch (InterruptedException ignored) {}
                 }
-                callWithRetry(rpcCall, attempt + 1).whenComplete((res, err) -> {
+                callWithRetry(rpcCall, nextServerIndex, attempt + 1).whenComplete((res, err) -> {
                     if (err != null) result.completeExceptionally(err);
                     else result.complete(res);
                 });
@@ -124,6 +126,15 @@ public class Clerk implements AutoCloseable {
             return ((PutResponse) response).getStatus();
         }
         return Status.STATUS_UNSPECIFIED;
+    }
+
+    private int getLeaderHintFromResponse(Object response) {
+        if (response instanceof GetResponse) {
+            return ((GetResponse) response).getLeaderHint();
+        } else if (response instanceof PutResponse) {
+            return ((PutResponse) response).getLeaderHint();
+        }
+        return -1;
     }
 
     @Override

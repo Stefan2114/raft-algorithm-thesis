@@ -109,8 +109,9 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 
 	index, term, isLeader := rsm.rf.Start(op)
 	if !isLeader {
+		leader := rsm.rf.GetLeader()
 		rsm.mu.Unlock()
-		return api.ErrWrongLeader, nil
+		return api.ErrWrongLeader, leader
 	}
 
 	rsm.logger.Debug("command submitted", zap.Int64("id", id), zap.Int("index", index), zap.Int("term", term))
@@ -127,11 +128,11 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 	case res, ok := <-ch:
 		if !ok {
 			rsm.logger.Debug("submit failed: channel closed", zap.Int64("id", id), zap.Int("index", index))
-			return api.ErrWrongLeader, nil
+			return api.ErrWrongLeader, rsm.rf.GetLeader()
 		}
 		if res.id != id {
 			rsm.logger.Debug("submit failed: leader changed", zap.Int64("id", id), zap.Int("index", index), zap.Int64("actualId", res.id))
-			return api.ErrWrongLeader, nil
+			return api.ErrWrongLeader, rsm.rf.GetLeader()
 		}
 		rsm.logger.Debug("submit success", zap.Int64("id", id), zap.Int("index", index))
 		return api.OK, res.val
@@ -140,7 +141,7 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 		pending := rsm.dumpPending()
 		rsm.mu.Unlock()
 		rsm.logger.Warn("submit timeout", zap.Int64("id", id), zap.Int("index", index), zap.String("pending", pending))
-		return api.ErrWrongLeader, nil
+		return api.ErrWrongLeader, rsm.rf.GetLeader()
 	}
 }
 
