@@ -9,8 +9,12 @@ import (
 	"google.golang.org/grpc/backoff"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"net/http"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"kvraft/config"
 	"kvraft/internal/logger"
+	"kvraft/internal/metrics"
 	"kvraft/internal/raft"
 	"kvraft/internal/rsm"
 	kvpb "kvraft/pb"
@@ -104,6 +108,17 @@ func StartNode(cfg *config.Config, nodeID int, dataDir string, maxRaftState int,
 
 	go func() {
 		_ = srv.Serve(lis)
+	}()
+
+	metrics.InitMetrics(me)
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	metricsServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", 8080+nodeID),
+		Handler: mux,
+	}
+	go func() {
+		_ = metricsServer.ListenAndServe()
 	}()
 
 	return &Node{

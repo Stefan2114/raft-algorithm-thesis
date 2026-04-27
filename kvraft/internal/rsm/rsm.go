@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"kvraft/api"
+	"kvraft/internal/metrics"
 	"kvraft/internal/raft"
 	"kvraft/raftapi"
+	"strconv"
 
 	"go.uber.org/zap"
 )
@@ -106,6 +108,8 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 	op := Op{Me: rsm.me, Id: id, Req: req}
 	ch := make(chan result)
 	rsm.mu.Lock()
+
+	metrics.ClientRequestsTotal.WithLabelValues(strconv.Itoa(rsm.me), "submit").Inc()
 
 	index, term, isLeader := rsm.rf.Start(op)
 	if !isLeader {

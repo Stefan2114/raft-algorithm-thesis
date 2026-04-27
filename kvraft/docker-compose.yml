@@ -10,9 +10,11 @@ services:
       - NODE_ID=0
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
+      - LOG_PATH=/logs/node0.log
     volumes:
       - ../cluster.json:/app/cluster.json:ro
       - node0_data:/data
+      - logs_data:/logs
 
   node1:
     build:
@@ -23,9 +25,11 @@ services:
       - NODE_ID=1
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
+      - LOG_PATH=/logs/node1.log
     volumes:
       - ../cluster.json:/app/cluster.json:ro
       - node1_data:/data
+      - logs_data:/logs
 
   node2:
     build:
@@ -36,9 +40,11 @@ services:
       - NODE_ID=2
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
+      - LOG_PATH=/logs/node2.log
     volumes:
       - ../cluster.json:/app/cluster.json:ro
       - node2_data:/data
+      - logs_data:/logs
 
   node3:
     build:
@@ -49,9 +55,11 @@ services:
       - NODE_ID=3
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
+      - LOG_PATH=/logs/node3.log
     volumes:
       - ../cluster.json:/app/cluster.json:ro
       - node3_data:/data
+      - logs_data:/logs
 
   node4:
     build:
@@ -62,11 +70,42 @@ services:
       - NODE_ID=4
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
+      - LOG_PATH=/logs/node4.log
     volumes:
       - ../cluster.json:/app/cluster.json:ro
       - node4_data:/data
+      - logs_data:/logs
+
+  prometheus:
+    image: prom/prometheus:latest
+    network_mode: "host"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:latest
+    network_mode: "host"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+      - loki
+
+  loki:
+    image: grafana/loki:latest
+    network_mode: "host"
+    command: -config.file=/etc/loki/local-config.yaml
+
+  promtail:
+    image: grafana/promtail:latest
+    network_mode: "host"
+    volumes:
+      - logs_data:/logs:ro
+      - ./config/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+    command: -config.file=/etc/promtail/promtail-config.yml
 
 volumes:
+  logs_data:
   node0_data:
   node1_data:
   node2_data:
