@@ -41,13 +41,45 @@ for node in nodes:
       - NODE_ID={node_id}
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
+      - LOG_PATH=/logs/node{node_id}.log
     volumes:
       - {config_path}:/app/cluster.json:ro
       - node{node_id}_data:/data
+      - logs_data:/logs
 
 """
 
-yaml_content += "volumes:\n"
+yaml_content += """  prometheus:
+    image: prom/prometheus:latest
+    network_mode: "host"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:latest
+    network_mode: "host"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    depends_on:
+      - prometheus
+      - loki
+
+  loki:
+    image: grafana/loki:latest
+    network_mode: "host"
+    command: -config.file=/etc/loki/local-config.yaml
+
+  promtail:
+    image: grafana/promtail:latest
+    network_mode: "host"
+    volumes:
+      - logs_data:/logs:ro
+      - ./config/promtail-config.yml:/etc/promtail/promtail-config.yml:ro
+    command: -config.file=/etc/promtail/promtail-config.yml
+
+"""
+
+yaml_content += "volumes:\n  logs_data:\n"
 for node in nodes:
     node_id = node['id']
     yaml_content += f"  node{node_id}_data:\n"
@@ -57,3 +89,48 @@ with open(compose_file, 'w') as f:
     f.write(yaml_content)
 
 print(f"Successfully generated {compose_file} for {num_nodes} nodes using config {config_path}")
+
+# Generate Monitoring Configs
+os.makedirs("config", exist_ok=True)
+
+prometheus_targets = []
+for node in nodes:
+    node_id = node['id']
+    prometheus_targets.append(f"'localhost:{8080 + node_id}'")
+
+prometheus_yml = f"""global:
+  scrape_interval: 5s
+
+scrape_configs:
+  - job_name: 'kvraft'
+    static_configs:
+      - targets: [{', '.join(prometheus_targets)}]
+"""
+
+with open("config/prometheus.yml", "w") as f:
+    f.write(prometheus_yml)
+
+promtail_yml = """server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://localhost:3100/loki/api/v1/push
+
+scrape_configs:
+- job_name: system
+  static_configs:
+  - targets:
+      - localhost
+    labels:
+      job: kvraft_logs
+      __path__: /logs/*log
+"""
+
+with open("config/promtail-config.yml", "w") as f:
+    f.write(promtail_yml)
+
+print("Successfully generated config/prometheus.yml and config/promtail-config.yml")

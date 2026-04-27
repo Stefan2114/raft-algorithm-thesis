@@ -119,6 +119,46 @@ When you are finished testing, cleanly shut down the cluster:
 docker-compose down
 ```
 
+## Observability & Monitoring
+
+The cluster comes pre-configured with a full monitoring and observability stack using **Prometheus**, **Grafana**, **Loki**, and **Promtail**. When you run `docker-compose up -d`, these services are automatically started alongside your cluster nodes.
+
+### Accessing the Dashboards
+
+1. **Grafana (Monitoring GUI)**:
+   - **URL**: [http://localhost:3000](http://localhost:3000)
+   - **Login credentials**: `admin` / `admin`
+
+2. **Prometheus (Metrics Database)**:
+   - **URL**: [http://localhost:9090](http://localhost:9090)
+
+### Configuring Grafana
+
+When you log into Grafana for the first time, you need to configure your data sources:
+
+1. **Add Prometheus (Metrics)**:
+   - Go to **Connections > Data sources > Add data source**
+   - Select **Prometheus**
+   - Set the URL to `http://localhost:9090`
+   - Click "Save & Test"
+
+2. **Add Loki (Logs)**:
+   - Go to **Connections > Data sources > Add data source**
+   - Select **Loki**
+   - Set the URL to `http://localhost:3100`
+   - Click "Save & Test"
+
+### What to Monitor
+
+Once your data sources are connected, you can create a dashboard and query the cluster state:
+
+- **Leader Election & Raft State**: Use the query `raft_state` to see the current state of each node (`0=Follower`, `1=Candidate`, `2=Leader`). You can visualize this as a Time Series to easily spot leader changes.
+- **Commit & Applied Indices**: Query `raft_commit_index` and `raft_last_applied` to monitor if your State Machine is lagging behind the Raft log.
+- **Client Traffic**: Query `raft_client_requests_total` to track the total throughput of requests hitting the cluster.
+- **Application Logs**: Go to the **Explore** tab in Grafana, select Loki, and run the query `{job="kvraft_logs"}` to see all structured Zap logs streaming in real-time from the cluster nodes.
+
+---
+
 ## Design Patterns
 
 - Creational: Static Factory Pattern

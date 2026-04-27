@@ -8,7 +8,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"kvraft/internal/metrics"
 	"kvraft/raftapi"
+	"strconv"
 
 	"go.uber.org/zap"
 )
@@ -190,9 +192,11 @@ func (rf *Raft) readPersist(data []byte, err error) {
 
 	if lastIncludedIndex > rf.commitIndex {
 		rf.commitIndex = lastIncludedIndex
+		metrics.CommitIndex.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.commitIndex))
 	}
 	if lastIncludedIndex > rf.lastApplied {
 		rf.lastApplied = lastIncludedIndex
+		metrics.LastApplied.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.lastApplied))
 	}
 }
 
@@ -264,6 +268,7 @@ func (rf *Raft) applier() {
 				SnapshotIndex: rf.lastIncludedIndex,
 			}
 			rf.lastApplied = rf.lastIncludedIndex
+			metrics.LastApplied.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.lastApplied))
 			rf.mu.Unlock()
 			rf.applyCh <- msg
 			continue
@@ -282,6 +287,7 @@ func (rf *Raft) applier() {
 			panic("Shouldn't get here 2")
 		}
 		rf.lastApplied = limit
+		metrics.LastApplied.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.lastApplied))
 		rf.mu.Unlock()
 		for _, entry := range entries {
 			rf.applyCh <- raftapi.ApplyMsg{
@@ -330,7 +336,9 @@ func (rf *Raft) resetHeartbeatTimer() {
 func (rf *Raft) becomeCandidate() {
 
 	rf.state = StateCandidate
+	metrics.RaftState.WithLabelValues(strconv.Itoa(rf.me)).Set(1)
 	rf.currentTerm += 1
+	metrics.CurrentTerm.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.currentTerm))
 	rf.persist()
 	rf.startElection()
 	rf.resetElectionTimer()
@@ -339,6 +347,8 @@ func (rf *Raft) becomeCandidate() {
 func (rf *Raft) becomeLeader() {
 
 	rf.state = StateLeader
+	metrics.RaftState.WithLabelValues(strconv.Itoa(rf.me)).Set(2)
+	metrics.LeaderChangesTotal.WithLabelValues(strconv.Itoa(rf.me)).Inc()
 	rf.currentLeader = rf.me
 	lastIndex := rf.getLastLog().Index
 	for i := range rf.peers {
@@ -353,8 +363,10 @@ func (rf *Raft) becomeLeader() {
 func (rf *Raft) handleHigherTerm(term int) bool {
 	if term > rf.currentTerm {
 		rf.currentTerm = term
+		metrics.CurrentTerm.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.currentTerm))
 		rf.votedFor = -1
 		rf.state = StateFollower
+		metrics.RaftState.WithLabelValues(strconv.Itoa(rf.me)).Set(0)
 		rf.persist()
 		rf.resetElectionTimer()
 		return true
@@ -383,7 +395,9 @@ func (rf *Raft) RequestVote(args *RequestVoteArgs, reply *RequestVoteReply) {
 
 	if args.Term > rf.currentTerm {
 		rf.state = StateFollower
+		metrics.RaftState.WithLabelValues(strconv.Itoa(rf.me)).Set(0)
 		rf.currentTerm, rf.votedFor = args.Term, -1
+		metrics.CurrentTerm.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.currentTerm))
 	}
 
 	canVote := rf.votedFor == -1 || rf.votedFor == args.CandidateId
@@ -420,10 +434,14 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 
 	if args.Term > rf.currentTerm {
 		rf.currentTerm, rf.votedFor = args.Term, -1
+		metrics.CurrentTerm.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.currentTerm))
 	}
 
 	rf.currentLeader = args.LeaderId
-	rf.state = StateFollower
+	if rf.state != StateFollower {
+		rf.state = StateFollower
+		metrics.RaftState.WithLabelValues(strconv.Itoa(rf.me)).Set(0)
+	}
 	rf.resetElectionTimer()
 
 	if hasConflict := rf.handleConsistencyConflict(args, reply); hasConflict {
@@ -494,6 +512,7 @@ func (rf *Raft) advanceCommitIndex(leaderCommit int) {
 		} else {
 			rf.commitIndex = lastIndex
 		}
+		metrics.CommitIndex.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.commitIndex))
 		rf.signalApplier()
 	}
 }
@@ -708,6 +727,7 @@ func (rf *Raft) updateCommitIndex() {
 				panic("Shouldn't get here")
 			}
 			rf.commitIndex = n
+			metrics.CommitIndex.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.commitIndex))
 			rf.logger.Debug("commitIndex advanced", zap.Int("index", rf.commitIndex))
 			rf.signalApplier()
 			break
@@ -756,11 +776,15 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	if args.Term > rf.currentTerm {
 		rf.currentTerm, rf.votedFor = args.Term, -1
+		metrics.CurrentTerm.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.currentTerm))
 		rf.persist()
 	}
 
 	rf.currentLeader = args.LeaderId
-	rf.state = StateFollower
+	if rf.state != StateFollower {
+		rf.state = StateFollower
+		metrics.RaftState.WithLabelValues(strconv.Itoa(rf.me)).Set(0)
+	}
 	rf.resetElectionTimer()
 
 	if args.LastIncludedIndex <= rf.lastIncludedIndex {
@@ -774,6 +798,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 
 	if args.LastIncludedIndex > rf.commitIndex {
 		rf.commitIndex = args.LastIncludedIndex
+		metrics.CommitIndex.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.commitIndex))
 	}
 
 	rf.persister.Save(rf.encodeState(), args.Data)
