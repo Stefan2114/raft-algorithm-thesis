@@ -28,6 +28,7 @@ type Raft struct {
 	state       NodeState
 	currentTerm int
 	votedFor    int
+	currentLeader int
 	logs        []Entry
 
 	commitIndex int
@@ -55,6 +56,7 @@ func Make(peers []Transport, me int,
 		state:          StateFollower,
 		currentTerm:    0,
 		votedFor:       -1,
+		currentLeader:  -1,
 		logs:           make([]Entry, 1),
 		nextIndex:      make([]int, len(peers)),
 		matchIndex:     make([]int, len(peers)),
@@ -82,6 +84,12 @@ func (rf *Raft) GetState() (int, bool) {
 	rf.mu.RLock()
 	defer rf.mu.RUnlock()
 	return rf.currentTerm, rf.state == StateLeader
+}
+
+func (rf *Raft) GetLeader() int {
+	rf.mu.RLock()
+	defer rf.mu.RUnlock()
+	return rf.currentLeader
 }
 
 // the service using Raft (e.g. a k/v server) wants to start
@@ -331,6 +339,7 @@ func (rf *Raft) becomeCandidate() {
 func (rf *Raft) becomeLeader() {
 
 	rf.state = StateLeader
+	rf.currentLeader = rf.me
 	lastIndex := rf.getLastLog().Index
 	for i := range rf.peers {
 		rf.nextIndex[i] = lastIndex + 1
@@ -413,6 +422,7 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 		rf.currentTerm, rf.votedFor = args.Term, -1
 	}
 
+	rf.currentLeader = args.LeaderId
 	rf.state = StateFollower
 	rf.resetElectionTimer()
 
@@ -491,6 +501,7 @@ func (rf *Raft) advanceCommitIndex(leaderCommit int) {
 func (rf *Raft) startElection() {
 
 	rf.votedFor = rf.me
+	rf.currentLeader = -1
 	rf.persist()
 
 	args := rf.genRequestVoteArgs()
@@ -748,6 +759,7 @@ func (rf *Raft) InstallSnapshot(args *InstallSnapshotArgs, reply *InstallSnapsho
 		rf.persist()
 	}
 
+	rf.currentLeader = args.LeaderId
 	rf.state = StateFollower
 	rf.resetElectionTimer()
 

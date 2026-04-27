@@ -1,0 +1,74 @@
+version: '3.8'
+
+services:
+  node0:
+    build:
+      context: .
+      network: host
+    network_mode: "host"
+    environment:
+      - NODE_ID=0
+      - CONFIG_PATH=/app/cluster.json
+      - DATA_DIR=/data
+    volumes:
+      - ../cluster.json:/app/cluster.json:ro
+      - node0_data:/data
+
+  node1:
+    build:
+      context: .
+      network: host
+    network_mode: "host"
+    environment:
+      - NODE_ID=1
+      - CONFIG_PATH=/app/cluster.json
+      - DATA_DIR=/data
+    volumes:
+      - ../cluster.json:/app/cluster.json:ro
+      - node1_data:/data
+
+  node2:
+    build:
+      context: .
+      network: host
+    network_mode: "host"
+    environment:
+      - NODE_ID=2
+      - CONFIG_PATH=/app/cluster.json
+      - DATA_DIR=/data
+    volumes:
+      - ../cluster.json:/app/cluster.json:ro
+      - node2_data:/data
+
+  node3:
+    build:
+      context: .
+      network: host
+    network_mode: "host"
+    environment:
+      - NODE_ID=3
+      - CONFIG_PATH=/app/cluster.json
+      - DATA_DIR=/data
+    volumes:
+      - ../cluster.json:/app/cluster.json:ro
+      - node3_data:/data
+
+  node4:
+    build:
+      context: .
+      network: host
+    network_mode: "host"
+    environment:
+      - NODE_ID=4
+      - CONFIG_PATH=/app/cluster.json
+      - DATA_DIR=/data
+    volumes:
+      - ../cluster.json:/app/cluster.json:ro
+      - node4_data:/data
+
+volumes:
+  node0_data:
+  node1_data:
+  node2_data:
+  node3_data:
+  node4_data:

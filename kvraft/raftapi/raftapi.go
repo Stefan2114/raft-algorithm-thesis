@@ -9,6 +9,9 @@ type Raft interface {
 	// Ask a Raft for its current term, and whether it thinks it is
 	// leader
 	GetState() (int, bool)
+	
+	// GetLeader returns the id of the current leader, or -1 if no leader is known.
+	GetLeader() int
 
 	// For Snaphots (3D)
 	Snapshot(index int, snapshot []byte)

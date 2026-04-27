@@ -91,15 +91,18 @@ protoc --go_out=kvraft --go_opt=module=kvraft --go-grpc_out=kvraft --go-grpc_opt
 ```
 
 ### 2. Build and Run
-Build the server and CLI binaries:
+If you want to use the local CLI tool to interact with the cluster, build it natively:
 ```bash
-go build -o kvserver ./cmd/kvserver
 go build -o kvcli ./cmd/cli
 ```
 
-To run the cluster (starts 3 nodes automatically in background):
+To configure and run the cluster using Docker:
 ```bash
-./start-cluster.sh --nodes 3 --clean
+# Generate a docker-compose.yml based on your cluster.json configuration
+./generate_compose.py ../cluster.json
+
+# Start the generated cluster in the background
+docker-compose up -d --build
 ```
 
 To use the Go client (clerk) CLI:
@@ -111,9 +114,9 @@ To use the Go client (clerk) CLI:
 ./kvcli --config ../cluster.json get mykey
 ```
 
-When you are finished testing, cleanly shut down the background processes:
+When you are finished testing, cleanly shut down the cluster:
 ```bash
-./stop-cluster.sh
+docker-compose down
 ```
 
 ## Design Patterns
