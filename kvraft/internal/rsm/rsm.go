@@ -271,3 +271,9 @@ func randValue() int64 {
 	_, _ = rand.Read(b[:])
 	return int64(binary.BigEndian.Uint64(b[:]))
 }
+
+func (rsm *RSM) LastApplied() int {
+	rsm.mu.Lock()
+	defer rsm.mu.Unlock()
+	return rsm.lastApplied
+}
