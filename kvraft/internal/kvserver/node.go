@@ -32,17 +32,17 @@ type Node struct {
 	connections []*grpc.ClientConn
 }
 
-func dialPeer(addr string) (*grpc.ClientConn, error) {
+func dialPeer(addr string, baseDelay, maxDelay, minConnectTimeout time.Duration) (*grpc.ClientConn, error) {
 	return grpc.NewClient(addr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithConnectParams(grpc.ConnectParams{
 			Backoff: backoff.Config{
-				BaseDelay:  100 * time.Millisecond,
+				BaseDelay:  baseDelay,
 				Multiplier: 1.6,
 				Jitter:     0.2,
-				MaxDelay:   3 * time.Second,
+				MaxDelay:   maxDelay,
 			},
-			MinConnectTimeout: 2 * time.Second,
+			MinConnectTimeout: minConnectTimeout,
 		}),
 	)
 }
@@ -73,7 +73,10 @@ func StartNode(cfg *config.Config, nodeID int, dataDir string, maxRaftState int,
 			transports[i] = raftransport.Noop{}
 			continue
 		}
-		conn, err := dialPeer(cfg.Nodes[i].Addr)
+		conn, err := dialPeer(cfg.Nodes[i].Addr,
+			time.Duration(cfg.BaseDelay)*time.Millisecond,
+			time.Duration(cfg.MaxDelay)*time.Second,
+			time.Duration(cfg.MinConnectTimeout)*time.Second)
 		if err != nil {
 			for _, c := range connections {
 				_ = c.Close()
@@ -87,7 +90,11 @@ func StartNode(cfg *config.Config, nodeID int, dataDir string, maxRaftState int,
 	raftLogger := logger.InitLogger(isProd, isDebug, logPath)
 
 	store := NewStore()
-	rsmInst := rsm.MakeRSM(transports, me, ps, maxRaftState, store, raftLogger)
+	rsmInst := rsm.MakeRSM(transports, me, ps, maxRaftState, store, raftLogger,
+		time.Duration(cfg.ElectionTimeoutMin)*time.Millisecond,
+		time.Duration(cfg.ElectionTimeoutRand)*time.Millisecond,
+		time.Duration(cfg.HeartbeatTimeout)*time.Millisecond,
+		time.Duration(cfg.SubmitTimeout)*time.Second)
 
 	rf, ok := rsmInst.Raft().(*raft.Raft)
 	if !ok {
@@ -114,7 +121,7 @@ func StartNode(cfg *config.Config, nodeID int, dataDir string, maxRaftState int,
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
 	metricsServer := &http.Server{
-		Addr:    fmt.Sprintf(":%d", 8080+nodeID),
+		Addr:    fmt.Sprintf(":%d", cfg.MetricsPortBase+nodeID),
 		Handler: mux,
 	}
 	go func() {

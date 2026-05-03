@@ -8,16 +8,17 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"kvraft/api"
+	"kvraft/config"
 	kvpb "kvraft/pb"
 )
-
-const rpcTimeout = 5 * time.Second
 
 type Clerk struct {
 	addresses   []string
 	lastLeader  int
 	connections []*grpc.ClientConn
 	clients     []kvpb.KVClient
+	rpcTimeout  time.Duration
+	retrySleep  time.Duration
 }
 
 func NewClerk(addresses []string) (*Clerk, error) {
@@ -41,6 +42,8 @@ func NewClerk(addresses []string) (*Clerk, error) {
 		lastLeader:  0,
 		connections: connections,
 		clients:     clients,
+		rpcTimeout:  time.Duration(config.GetEnvInt("CLERK_RPC_TIMEOUT", 5)) * time.Second,
+		retrySleep:  time.Duration(config.GetEnvInt("CLERK_RETRY_SLEEP", 20)) * time.Millisecond,
 	}, nil
 }
 
@@ -74,7 +77,7 @@ func (ck *Clerk) Get(key string) (string, api.TVersion, api.Err) {
 	srv := ck.lastLeader
 	tried := 0
 	for {
-		cctx, cancel := context.WithTimeout(ctx, rpcTimeout)
+		cctx, cancel := context.WithTimeout(ctx, ck.rpcTimeout)
 		resp, err := ck.clients[srv].Get(cctx, &kvpb.GetRequest{Key: key})
 		cancel()
 		if err == nil && resp.Status != kvpb.Status_ERR_WRONG_LEADER {
@@ -89,7 +92,7 @@ func (ck *Clerk) Get(key string) (string, api.TVersion, api.Err) {
 		}
 		
 		if tried >= len(ck.clients) {
-			time.Sleep(20 * time.Millisecond)
+			time.Sleep(ck.retrySleep)
 			tried = 0
 		}
 	}
@@ -101,7 +104,7 @@ func (ck *Clerk) Put(key string, value string, version api.TVersion) api.Err {
 	firstAttempt := true
 	tried := 0
 	for {
-		cctx, cancel := context.WithTimeout(ctx, rpcTimeout)
+		cctx, cancel := context.WithTimeout(ctx, ck.rpcTimeout)
 		resp, err := ck.clients[srv].Put(cctx, &kvpb.PutRequest{
 			Key:     key,
 			Value:   value,
@@ -135,7 +138,7 @@ func (ck *Clerk) Put(key string, value string, version api.TVersion) api.Err {
 		}
 		
 		if tried >= len(ck.clients) {
-			time.Sleep(20 * time.Millisecond)
+			time.Sleep(ck.retrySleep)
 			tried = 0
 		}
 	}

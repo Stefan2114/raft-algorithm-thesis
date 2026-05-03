@@ -12,40 +12,15 @@ import (
 	"kvraft/internal/kvserver"
 )
 
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-	return fallback
-}
-
-func getEnvInt(key string, fallback int) int {
-	if value, ok := os.LookupEnv(key); ok {
-		if i, err := strconv.Atoi(value); err == nil {
-			return i
-		}
-	}
-	return fallback
-}
-
-func getEnvBool(key string, fallback bool) bool {
-	if value, ok := os.LookupEnv(key); ok {
-		if b, err := strconv.ParseBool(value); err == nil {
-			return b
-		}
-	}
-	return fallback
-}
-
 func main() {
 	var (
-		cfgPath      = flag.String("config", getEnv("CONFIG_PATH", "cluster.json"), "cluster JSON")
-		id           = flag.Int("id", getEnvInt("NODE_ID", -1), "node id (must match config)")
-		dataDir      = flag.String("datadir", getEnv("DATA_DIR", ""), "persistent state directory")
-		maxRaftState = flag.Int("maxraftstate", getEnvInt("MAX_RAFT_STATE", -1), "snapshot when persist size exceeds this (-1 = disable)")
-		isProd       = flag.Bool("production", getEnvBool("IS_PROD", false), "run in production mode (JSON logs)")
-		isDebug      = flag.Bool("debug", getEnvBool("DEBUG", false), "enable debug logging")
-		logPath      = flag.String("logpath", getEnv("LOG_PATH", ""), "path to save logs to a specific file")
+		cfgPath      = flag.String("config", config.GetEnv("CONFIG_PATH", "cluster.json"), "cluster JSON")
+		id           = flag.Int("id", config.GetEnvInt("NODE_ID", -1), "node id (must match config)")
+		dataDir      = flag.String("datadir", config.GetEnv("DATA_DIR", ""), "persistent state directory")
+		maxRaftState = flag.Int("maxraftstate", config.GetEnvInt("MAX_RAFT_STATE", -1), "snapshot when persist size exceeds this (-1 = disable)")
+		isProd       = flag.Bool("production", config.GetEnvBool("IS_PROD", false), "run in production mode (JSON logs)")
+		isDebug      = flag.Bool("debug", config.GetEnvBool("DEBUG", false), "enable debug logging")
+		logPath      = flag.String("logpath", config.GetEnv("LOG_PATH", ""), "path to save logs to a specific file")
 	)
 	flag.Parse()
 	if *id < 0 || *dataDir == "" {

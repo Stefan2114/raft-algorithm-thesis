@@ -22,6 +22,14 @@ type Raft interface {
 	Kill()
 }
 
+type Persister interface {
+	ReadRaftState() ([]byte, error)
+	RaftStateSize() int
+	ReadSnapshot() ([]byte, error)
+	SnapshotSize() int
+	Save(raftState []byte, snapshot []byte) error
+}
+
 // As each Raft peer becomes aware that successive log entries are
 // committed, the peer should send an ApplyMsg to the server (or
 // tester), via the applyCh passed to Make(). Set CommandValid to true

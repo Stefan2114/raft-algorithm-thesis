@@ -19,7 +19,7 @@ type Raft struct {
 	mu        sync.RWMutex
 	logger    *zap.Logger
 	peers     []Transport
-	persister Persister
+	persister raftapi.Persister
 	me        int
 	dead      int32
 
@@ -27,11 +27,11 @@ type Raft struct {
 	applyCond      *sync.Cond
 	replicatorCond []*sync.Cond
 
-	state       NodeState
-	currentTerm int
-	votedFor    int
+	state         NodeState
+	currentTerm   int
+	votedFor      int
 	currentLeader int
-	logs        []Entry
+	logs          []Entry
 
 	commitIndex int
 	lastApplied int
@@ -43,10 +43,15 @@ type Raft struct {
 
 	electionTimer  *time.Timer
 	heartBeatTimer *time.Timer
+
+	electionTimeoutMin  time.Duration
+	electionTimeoutRand time.Duration
+	heartbeatTimeout    time.Duration
 }
 
 func Make(peers []Transport, me int,
-	persister Persister, applyCh chan raftapi.ApplyMsg, logger *zap.Logger) raftapi.Raft {
+	persister raftapi.Persister, applyCh chan raftapi.ApplyMsg, logger *zap.Logger,
+	electionMin, electionRand, hb time.Duration) raftapi.Raft {
 
 	rf := &Raft{
 		peers:          peers,
@@ -62,10 +67,14 @@ func Make(peers []Transport, me int,
 		logs:           make([]Entry, 1),
 		nextIndex:      make([]int, len(peers)),
 		matchIndex:     make([]int, len(peers)),
-		heartBeatTimer: time.NewTimer(StableHeartbeatTimeout()),
-		electionTimer:  time.NewTimer(RandomizedElectionTimeout()),
-		logger:         logger.With(zap.Int("node", me)),
+		electionTimeoutMin:  electionMin,
+		electionTimeoutRand: electionRand,
+		heartbeatTimeout:    hb,
+		logger:              logger.With(zap.Int("node", me)),
 	}
+
+	rf.heartBeatTimer = time.NewTimer(rf.stableHeartbeatTimeout())
+	rf.electionTimer = time.NewTimer(rf.randomizedElectionTimeout())
 
 	for i := range peers {
 		rf.replicatorCond[i] = sync.NewCond(&rf.mu)
@@ -150,6 +159,9 @@ func (rf *Raft) encodeState() []byte {
 
 // save Raft's persistent state to stable storage
 func (rf *Raft) persist() {
+	if rf.killed() {
+		return
+	}
 	snapshot, _ := rf.persister.ReadSnapshot()
 	err := rf.persister.Save(rf.encodeState(), snapshot)
 	if err != nil {
@@ -326,11 +338,11 @@ func (rf *Raft) signalReplication(peer int) {
 }
 
 func (rf *Raft) resetElectionTimer() {
-	rf.electionTimer.Reset(RandomizedElectionTimeout())
+	rf.electionTimer.Reset(rf.randomizedElectionTimeout())
 }
 
 func (rf *Raft) resetHeartbeatTimer() {
-	rf.heartBeatTimer.Reset(StableHeartbeatTimeout())
+	rf.heartBeatTimer.Reset(rf.stableHeartbeatTimeout())
 }
 
 func (rf *Raft) becomeCandidate() {
@@ -861,11 +873,11 @@ func (rf *Raft) killed() bool {
 	return z == 1
 }
 
-func RandomizedElectionTimeout() time.Duration {
-	ms := 600 + rand.Int63()%400
+func (rf *Raft) randomizedElectionTimeout() time.Duration {
+	ms := rf.electionTimeoutMin.Milliseconds() + rand.Int63()%rf.electionTimeoutRand.Milliseconds()
 	return time.Duration(ms) * time.Millisecond
 }
 
-func StableHeartbeatTimeout() time.Duration {
-	return time.Duration(100) * time.Millisecond
+func (rf *Raft) stableHeartbeatTimeout() time.Duration {
+	return rf.heartbeatTimeout
 }
