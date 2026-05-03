@@ -57,6 +57,7 @@ type RSM struct {
 	pending      map[int]*pendingEntry
 	lastApplied  int
 	logger       *zap.Logger
+	submitTimeout time.Duration
 }
 
 // servers[] contains the ports of the set of
@@ -74,17 +75,19 @@ type RSM struct {
 //
 // MakeRSM() must return quickly, so it should start goroutines for
 // any long-running work.
-func MakeRSM(servers []raft.Transport, me int, persister raft.Persister, maxRaftState int, sm StateMachine, logger *zap.Logger) *RSM {
+func MakeRSM(servers []raft.Transport, me int, persister raftapi.Persister, maxRaftState int, sm StateMachine, logger *zap.Logger,
+	electionMin, electionRand, hb, submitTimeout time.Duration) *RSM {
 	rsm := &RSM{
 		me:           me,
 		maxRaftState: maxRaftState,
 		applyCh:      make(chan raftapi.ApplyMsg),
 		sm:           sm,
-		pending:      make(map[int]*pendingEntry),
-		logger:       logger.With(zap.Int("node", me), zap.String("component", "rsm")),
+		pending:       make(map[int]*pendingEntry),
+		logger:        logger.With(zap.Int("node", me), zap.String("component", "rsm")),
+		submitTimeout: submitTimeout,
 	}
 	if !useRaftStateMachine {
-		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh, logger)
+		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh, logger, electionMin, electionRand, hb)
 	}
 	if snapshot, _ := persister.ReadSnapshot(); len(snapshot) > 0 {
 		rsm.sm.Restore(snapshot)
@@ -140,7 +143,7 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 		}
 		rsm.logger.Debug("submit success", zap.Int64("id", id), zap.Int("index", index))
 		return api.OK, res.val
-	case <-time.After(10 * time.Second):
+	case <-time.After(rsm.submitTimeout):
 		rsm.mu.Lock()
 		pending := rsm.dumpPending()
 		rsm.mu.Unlock()
@@ -267,4 +270,10 @@ func randValue() int64 {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
 	return int64(binary.BigEndian.Uint64(b[:]))
+}
+
+func (rsm *RSM) LastApplied() int {
+	rsm.mu.Lock()
+	defer rsm.mu.Unlock()
+	return rsm.lastApplied
 }

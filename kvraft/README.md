@@ -98,12 +98,33 @@ go build -o kvcli ./cmd/cli
 
 To configure and run the cluster using Docker:
 ```bash
-# Generate a docker-compose.yml based on your cluster.json configuration
-./generate_compose.py ../cluster.json
+# Generate docker-compose.yml and monitoring configs
+# You can customize timeouts and ports via CLI arguments
+./setup_cluster.py ../cluster.json --election-min 1000 --heartbeat 200
 
 # Start the generated cluster in the background
 docker-compose up -d --build
 ```
+
+### Configuration & Environment Variables
+
+The cluster behavior can be customized during the setup phase using command-line arguments in `setup_cluster.py`. These values are then injected into the cluster nodes via environment variables.
+
+#### CLI Arguments for `setup_cluster.py`
+
+| Argument | Description | Default | Environment Variable |
+|----------|-------------|---------|----------------------|
+| `config` | **(Required)** Path to `cluster.json` topology. | N/A | `CONFIG_PATH` |
+| `--election-min` | Minimum election timeout (ms). | `600` | `RAFT_ELECTION_TIMEOUT_MIN` |
+| `--election-rand` | Random jitter for election timeout (ms). | `400` | `RAFT_ELECTION_TIMEOUT_RAND` |
+| `--heartbeat` | Heartbeat interval (ms). | `100` | `RAFT_HEARTBEAT_TIMEOUT` |
+| `--submit-timeout` | RSM command commit timeout (seconds). | `10` | `RSM_SUBMIT_TIMEOUT` |
+| `--metrics-port-base`| Base port for Prometheus metrics. | `8080` | `METRICS_PORT_BASE` |
+| `--clerk-rpc-timeout`| Clerk RPC call timeout (seconds). | `5` | `CLERK_RPC_TIMEOUT` |
+| `--clerk-retry-sleep`| Clerk cluster-wide retry delay (ms). | `20` | `CLERK_RETRY_SLEEP` |
+
+> [!IMPORTANT]
+> The `cluster.json` file is strictly used for defining the network topology (node IDs and addresses). All performance-related settings (timeouts, delays) are managed via environment variables and should be configured through the `setup_cluster.py` script.
 
 To use the Go client (clerk) CLI:
 ```bash
