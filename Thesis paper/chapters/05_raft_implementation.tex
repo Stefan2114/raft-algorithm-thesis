@@ -15,24 +15,11 @@ The \texttt{Raft} structure maintains the logical clock via the \texttt{currentT
 \end{itemize}
 
 \subsection{Detecting Obsolete State}
-The implementation uses a centralized method, \texttt{handleHigherTerm}, to process incoming RPC terms. If any node (including a leader) discovers that its \texttt{currentTerm} is less than the term in an incoming request or reply, it must immediately update its term and revert to the \texttt{Follower} state.
+The implementation uses a centralized method, \texttt{handleHigherTerm}, to process incoming RPC terms.
+If any node (including a leader) discovers that its \texttt{currentTerm} is less than the term in an incoming request or reply, it must immediately update its term and revert to the \texttt{Follower} state.
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a flow diagram for the handleHigherTerm logic.
-    % Incoming Term > currentTerm -> Update term, votedFor=-1, state=Follower, persist(), resetTimer.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Logical Clock Update Flow - handleHigherTerm] \\
-        (Incoming RPC Term $\rightarrow$ Comparison $\rightarrow$ State Reset and Persistence)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The logic for updating the logical clock. This mechanism ensures that nodes always converge on the most recent term and step down from leadership if superseded.}
-    \label{fig:handle_higher_term}
-\end{figure}
-
-The logic shown in Figure \ref{fig:handle_higher_term} is critical for safety. By resetting \texttt{votedFor} to -1 upon a term increase, the implementation ensures the node is eligible to participate in the new term's election. This transition is also recorded in the \texttt{raft\_current\_term} metric to provide real-time visibility into the cluster's logical time progression.
+This logic is critical for safety.
+By resetting \texttt{votedFor} to -1 upon a term increase, the implementation ensures the node is eligible to participate in the new term's election. This transition is also recorded in the \texttt{raft\_current\_term} metric to provide real-time visibility into the cluster's logical time progression.
 
 \section{Leader Election Mechanics}
 Leader election is the process by which the cluster maintains progress. The implementation utilizes Go's concurrency primitives—specifically goroutines, channels, and timers—to manage state transitions and timeouts.
@@ -53,7 +40,8 @@ func (rf *Raft) randomizedElectionTimeout() time.Duration {
 As depicted in the ticker logic, if the \texttt{electionTimer} fires while the node is a Follower or Candidate, it triggers a transition to the Candidate state.
 
 \subsection{State Transitions: The becomeCandidate Routine}
-When a node's election timeout expires, it transitions through the \texttt{becomeCandidate} method. This routine performs the following atomic operations:
+When a node's election timeout expires, it transitions through the \texttt{becomeCandidate} method.
+This routine performs the following atomic operations:
 \begin{enumerate}
     \item Increments the \texttt{currentTerm}.
     \item Updates the state to \texttt{StateCandidate} and modifies the \texttt{raft\_state} metric.
@@ -62,22 +50,7 @@ When a node's election timeout expires, it transitions through the \texttt{becom
     \item Spawns asynchronous \texttt{requestVoteFromPeer} goroutines to solicit votes from the rest of the cluster.
 \end{enumerate}
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a diagram showing the Candidate State transition.
-    % Follower (timeout) -> becomeCandidate() -> StartElection() -> requestVoteFromPeer().
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Candidate State Transition and Voting Flow] \\
-        (Timeout $\rightarrow$ Increment Term $\rightarrow$ Self-Vote $\rightarrow$ RequestVote RPCs)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The implementation flow for initiating a leader election. The use of background goroutines ensures that the node can handle multiple peer responses concurrently.}
-    \label{fig:election_flow}
-\end{figure}
-
-The transition shown in Figure \ref{fig:election_flow} highlights the "Request-and-Vote" cycle. A candidate becomes the leader immediately upon receiving a majority of votes, at which point it calls \texttt{becomeLeader} to begin sending heartbeats and managing the log. If a candidate receives an \texttt{AppendEntries} RPC from a valid leader during this process, it recognizes the leader's authority and reverts to the Follower state.
+This "Request-and-Vote" cycle allows a candidate to become the leader immediately upon receiving a majority of votes, at which point it calls \texttt{becomeLeader} to begin sending heartbeats and managing the log. A candidate becomes the leader immediately upon receiving a majority of votes, at which point it calls \texttt{becomeLeader} to begin sending heartbeats and managing the log. If a candidate receives an \texttt{AppendEntries} RPC from a valid leader during this process, it recognizes the leader's authority and reverts to the Follower state.
 
 \section{Log Replication Mechanism}
 \label{sec:log_replication_impl}
@@ -100,50 +73,23 @@ The leader maintains two critical state variables for each follower to manage th
     \item \textbf{\texttt{matchIndex[]}}: The index of the highest log entry known to be replicated on that follower. It is initialized to 0 and increases monotonically.
 \end{itemize}
 
-When an \texttt{AppendEntries} RPC fails due to log inconsistency, the leader resolves the conflict by adjusting the \texttt{nextIndex} backward. The implementation optimizes this process using \texttt{conflictIndex} and \texttt{conflictTerm} metadata returned by the follower, allowing the leader to bypass multiple entries rather than decrementing by one index at a time.
+When an \texttt{AppendEntries} RPC fails due to log inconsistency, the leader resolves the conflict by adjusting the \texttt{nextIndex} backward.
+The implementation optimizes this process using \texttt{conflictIndex} and \texttt{conflictTerm} metadata returned by the follower, allowing the leader to bypass multiple entries rather than decrementing by one index at a time.
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a diagram showing the Replicator goroutine lifecycle and its interaction with nextIndex/matchIndex.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Replicator Goroutine and Index Management] \\
-        (Leader Log $\leftrightarrow$ [nextIndex, matchIndex] $\leftrightarrow$ Follower Log)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The per-follower replication state maintained by the leader. The \texttt{nextIndex} acts as a moving window for synchronization efforts.}
-    \label{fig:index_management}
-\end{figure}
-
-The relationship between these indices, as shown in Figure \ref{fig:index_management}, ensures that the leader can independently track the progress of every node in the cluster. Successful responses from a follower trigger the \texttt{advancePeerIndices} method, which moves the \texttt{matchIndex} forward and signals the potential for a new commitment.
+The relationship between these indices ensures that the leader can independently track the progress of every node in the cluster. Successful responses from a follower trigger the \texttt{advancePeerIndices} method, which moves the \texttt{matchIndex} forward and signals the potential for a new commitment.
 
 \section{Ensuring Safety Invariants}
 The safety of the replicated state machine depends on strict rules governing when an entry is considered "committed" and safe to apply to the application state.
 
 \subsection{Quorum Commitment and the Commit Index}
-The leader advances its \texttt{commitIndex} by examining the \texttt{matchIndex} values of all peers. The \texttt{updateCommitIndex} routine implements this logic by searching for the highest index $N$ that satisfies two conditions:
+The leader advances its \texttt{commitIndex} by examining the \texttt{matchIndex} values of all peers.
+The \texttt{updateCommitIndex} routine implements this logic by searching for the highest index $N$ that satisfies two conditions:
 \begin{enumerate}
     \item \textbf{Majority Requirement}: $N$ must be replicated on a majority of the nodes in the cluster.
     \item \textbf{Current Term Requirement}: The entry at index $N$ must have been created in the leader's current term.
 \end{enumerate}
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a visualization of the Quorum Commitment check.
-    % Show 5 nodes, matchIndices sorted, and the median being the new commitIndex.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Quorum Commitment and Majority Calculation] \\
-        (MatchIndices: [10, 10, 8, 5, 2] $\rightarrow$ Majority at Index 8)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The process of advancing the \texttt{commitIndex}. The leader only commits entries that are present on a majority of nodes to ensure they survive future elections.}
-    \label{fig:quorum_commitment}
-\end{figure}
-
-As illustrated in Figure \ref{fig:quorum_commitment}, the commitment logic ensures that once an entry is finalized, it cannot be overwritten by a subsequent leader. The restriction to only commit entries from the current term by counting replicas is a vital safety invariant that prevents the "overwriting committed entries" edge case discussed in the theoretical background.
+This commitment logic ensures that once an entry is finalized, it cannot be overwritten by a subsequent leader. The restriction to only commit entries from the current term by counting replicas is a vital safety invariant that prevents the "overwriting committed entries" edge case discussed in the theoretical background.
 
 \subsection{Log Application Rules}
 Once an entry is committed, it must be applied to the state machine in order. This is handled by a dedicated \texttt{applier} goroutine that monitors the gap between \texttt{lastApplied} and \texttt{commitIndex}.

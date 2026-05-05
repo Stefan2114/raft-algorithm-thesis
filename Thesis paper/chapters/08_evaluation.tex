@@ -24,22 +24,8 @@ To simulate the "adversarial" nature of distributed environments, the project im
     \item \textbf{Server Crashes}: Nodes are abruptly killed and restarted during active replication to verify the durability of the state machine.
 \end{itemize}
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a diagram showing the Chaos Testing Architecture.
-    % Show [Test Runner] injecting [Partitions/Crashes] into a [Cluster] while [Clerk] sends requests.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Chaos Testing and Network Simulation Framework] \\
-        (Simulating partitions and crashes during active KV operations)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The chaos testing architecture. The framework simultaneously performs data operations while introducing network-level disturbances to test the system's resilience.}
-    \label{fig:chaos_testing}
-\end{figure}
-
-As illustrated in Figure \ref{fig:chaos_testing}, the chaos engine operates concurrently with the client. This "stress testing" ensures that edge cases—such as a leader failing exactly at the moment of commitment—are correctly handled without data loss.
+The chaos engine operates concurrently with the client.
+This "stress testing" ensures that edge cases—such as a leader failing exactly at the moment of commitment—are correctly handled without data loss.
 
 \subsection{Linearizability Verification with Porcupine}
 While standard tests check for specific failure modes, they cannot prove that every execution trace is linearizable. To achieve this, the project integrates the \textbf{Porcupine} linearizability checker.
@@ -103,21 +89,8 @@ Throughput was measured by executing a sustained volume of operations. The syste
 \subsection{Recovery Time Analysis}
 A critical metric for a high-availability system is the time required to resume normal operation after a leader crash. This depends on the detection of the failure via heartbeat timeouts and the completion of a new election.
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a graph showing throughput drop during leader failure and recovery.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Recovery Time After Leader Failure] \\
-        (Throughput Drop $\rightarrow$ Election Duration $\rightarrow$ Recovery)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{System recovery lifecycle. The gap represents the period where no leader is active and client requests are retried by the Clerk.}
-    \label{fig:recovery_time}
-\end{figure}
-
-The recovery process illustrated in Figure \ref{fig:recovery_time} is governed by the \texttt{electionTimer} settings in the configuration. By tuning the \texttt{RAFT\_ELECTION\_TIMEOUT\_MIN} and \texttt{RAFT\_ELECTION\_TIMEOUT\_RAND} parameters, the system can balance between rapid failure detection and the risk of frequent unnecessary elections due to network jitter.
+The recovery process is governed by the \texttt{electionTimer} settings in the configuration.
+By tuning the \texttt{RAFT\_ELECTION\_TIMEOUT\_MIN} and \texttt{RAFT\_ELECTION\_TIMEOUT\_RAND} parameters, the system can balance between rapid failure detection and the risk of frequent unnecessary elections due to network jitter.
 
 \section{Observability and Metrics}
 \label{sec:observability}

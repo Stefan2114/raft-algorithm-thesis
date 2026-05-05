@@ -4,39 +4,33 @@
 This chapter explores the landscape of distributed consensus, tracing the evolution from early theoretical foundations to the practical, high-performance systems used in modern cloud infrastructure. By examining the transition from Paxos to Raft, we establish the context for the design decisions made in this thesis.
 
 \section{Evolution of Consensus Algorithms}
-The quest for reliability in distributed systems has led to the development of various consensus protocols. The primary goal of these algorithms is to allow a collection of independent nodes to agree on a single data value or a sequence of operations, even in the presence of faulty components or network partitions. 
-
-The chronological development of these protocols, as depicted in Figure \ref{fig:consensus_evolution}, shows a clear transition from complex theoretical models to more pragmatic, implementation-focused designs.
+The quest for reliability in distributed systems has led to the development of various consensus protocols.
+The primary goal of these algorithms is to allow a collection of independent nodes to agree on a single data value or a sequence of operations, even in the presence of faulty components or network partitions.
+The chronological development of these protocols shows a clear transition from complex theoretical models to more pragmatic, implementation-focused designs.
 
 \subsection{The Classical Approach: Paxos}
-The journey of modern consensus began with Leslie Lamport's Paxos algorithm \cite{Lamport1998}. Introduced through the metaphor of a "Part-Time Parliament," Paxos proved that consensus could be achieved in an asynchronous system, provided a majority of nodes were functional. 
-
-Despite its mathematical elegance and proven correctness, Paxos gained a reputation for being exceptionally difficult to understand and implement \cite{PaxosSimple}. The original specification left many practical details—such as configuration changes and leader election—as exercises for the implementer, leading to a variety of "Paxos-like" dialects that were often incompatible and difficult to verify.
+The journey of modern consensus began with Leslie Lamport's Paxos algorithm \cite{Lamport1998}.
+Introduced through the metaphor of a "Part-Time Parliament," Paxos proved that consensus could be achieved in an asynchronous system, provided a majority of nodes were functional.
+Despite its mathematical elegance and proven correctness, Paxos gained a reputation for being exceptionally difficult to understand and implement \cite{PaxosSimple}.
+The original specification left many practical details—such as configuration changes and leader election—as exercises for the implementer, leading to a variety of "Paxos-like" dialects that were often incompatible and difficult to verify.
 
 \subsection{Viewstamped Replication (VSR)}
-Developed around the same time as Paxos, Viewstamped Replication (VSR) \cite{LiskovVSR} provided a similar approach to State Machine Replication (SMR). VSR introduced the concept of "views" (similar to Raft's terms), where a primary node directs the replication process. While highly influential, it remained less cited in academic literature compared to Paxos until its recent "revisit" in the context of modern distributed systems.
+Developed around the same time as Paxos, Viewstamped Replication (VSR) \cite{LiskovVSR} provided a similar approach to State Machine Replication (SMR).
+VSR introduced the concept of "views" (similar to Raft's terms), where a primary node directs the replication process.
+While highly influential, it remained less cited in academic literature compared to Paxos until its recent "revisit" in the context of modern distributed systems.
 
 \subsection{ZooKeeper Atomic Broadcast (Zab)}
-As the industry moved toward big data and distributed coordination, the Apache ZooKeeper project introduced Zab (ZooKeeper Atomic Broadcast) \cite{Zab2011}. Zab was designed specifically for primary-backup systems to ensure that updates are processed in a strict order. Unlike Paxos, which is often used for a single-value agreement, Zab is inherently designed for high-throughput broadcast of state changes.
+As the industry moved toward big data and distributed coordination, the Apache ZooKeeper project introduced Zab (ZooKeeper Atomic Broadcast) \cite{Zab2011}.
+Zab was designed specifically for primary-backup systems to ensure that updates are processed in a strict order.
+Unlike Paxos, which is often used for a single-value agreement, Zab is inherently designed for high-throughput broadcast of state changes.
 
 \subsection{The Shift Toward Understandability: Raft}
-In 2014, Ongaro and Ousterhout introduced Raft \cite{Raft2014}, specifically designed to address the complexity of Paxos. Raft decomposes the consensus problem into three relatively independent subproblems: Leader Election, Log Replication, and Safety. By enforcing a stronger degree of coherency, Raft reduced the state space that developers must manage, leading to widespread industrial adoption.
+In 2014, Ongaro and Ousterhout introduced Raft \cite{Raft2014}, specifically designed to address the complexity of Paxos.
+Raft decomposes the consensus problem into three relatively independent subproblems: Leader Election, Log Replication, and Safety.
+By enforcing a stronger degree of coherency, Raft reduced the state space that developers must manage, leading to widespread industrial adoption.
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a timeline diagram here.
-    % The diagram should show VSR(1988), Paxos(1990s), Zab(2008-2011), and Raft(2014).
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Timeline of Consensus Algorithms Evolution]
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{Chronological evolution of major consensus protocols from theoretical foundations to modern implementations.}
-    \label{fig:consensus_evolution}
-\end{figure}
-
-The progression shown in Figure \ref{fig:consensus_evolution} highlights how the focus of the research community shifted over three decades. While early work like VSR and Paxos focused on proving the possibility of consensus, later developments like Zab and Raft prioritized the practical requirements of building and maintaining production-grade distributed systems.
+This progression highlights how the focus of the research community shifted over three decades.
+While early work like VSR and Paxos focused on proving the possibility of consensus, later developments like Zab and Raft prioritized the practical requirements of building and maintaining production-grade distributed systems.
 
 \section{Industrial Distributed Key-Value Stores}
 The transition of consensus algorithms from academic research to production-ready software has led to the development of several high-performance distributed key-value stores. These systems serve as the critical "source of truth" for infrastructure orchestration, managing metadata that requires the highest levels of availability and consistency. 
