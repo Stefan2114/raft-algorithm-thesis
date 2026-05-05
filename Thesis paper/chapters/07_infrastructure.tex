@@ -37,23 +37,8 @@ The integration architecture follows a shared-contract model:
     \item \textbf{Asynchronous Programming Model}: While the Go backend uses goroutines, the Java client utilizes \texttt{CompletableFuture} and gRPC \texttt{FutureStub} to provide a non-blocking API to Java applications, maintaining high responsiveness \cite{24}.
 \end{enumerate}
 
-\begin{figure}[h]
-    \centering
-    % 
-    % TODO: Add a sequence diagram or block diagram showing the Java Clerk 
-    % calling the Go gRPC Server, handling a WrongLeader error, and retrying.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Java-Go Cross-Language Interaction] \\
-        (Java Clerk $\xrightarrow{gRPC}$ Go Node $\rightarrow$ Hint Response $\rightarrow$ Java Retry)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The cross-platform communication flow. The gRPC layer abstracts the language differences, allowing the Java client to participate in the Raft-based protocol seamlessly.}
-    \label{fig:cross_lang_interop}
-\end{figure}
-
-The success of this integration, as illustrated in Figure \ref{fig:cross_lang_interop}, proves that the Raft implementation is not tied to a specific ecosystem. By relying on industry-standard protocols, the system can support a diverse range of clients, from low-latency Go microservices to heavy-duty Java enterprise applications.
+The success of this cross-language integration proves that the Raft implementation is not tied to a specific ecosystem.
+By relying on industry-standard protocols, the system can support a diverse range of clients, from low-latency Go microservices to heavy-duty Java enterprise applications.
 
 \section{Deployment \& Automation}
 \label{sec:deployment_automation}
@@ -67,21 +52,6 @@ The system utilizes a \textbf{multi-stage build} process defined in the \texttt{
     \item \textbf{Build Stage}: A \texttt{golang:1.25-alpine} image is used as the base to compile the \texttt{kvserver} binary. This stage includes downloading dependencies and performing a static build to ensure the binary is self-contained.
     \item \textbf{Final Stage}: The resulting binary is copied into a minimal \texttt{alpine:latest} image. This stage only contains the executable and necessary CA certificates, significantly reducing the attack surface and deployment footprint.
 \end{itemize}
-
-\begin{figure}[h]
-    \centering
-    % TODO: Add a diagram of the Multi-Stage Docker Build.
-    % Show [Go SDK + Source] -> [Compiler] -> [Static Binary] -> [Minimal Alpine Image].
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Multi-Stage Docker Build Process] \\
-        (From 800MB+ Build Environment to <20MB Final Image)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The multi-stage build pipeline for the KV server, ensuring an optimized and secure production image.}
-    \label{fig:docker_build}
-\end{figure}
 
 The \texttt{ENTRYPOINT} of the container is set to execute the \texttt{kvserver} binary, allowing the orchestrator to pass node-specific configuration via command-line flags or environment variables.
 

@@ -54,28 +54,13 @@ As defined in the system's communication protocol \cite{8}, the replication mech
     \item \textbf{Commit Coordination}: The leader must communicate its current \texttt{leader\_commit} index so that followers know which entries are safe to apply to their local state machines \cite{12}.
 \end{itemize}
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a diagram showing the AppendEntries RPC flow between Leader and Follower.
-    % Highlight the consistency check: Follower compares its log[prev_log_index].term with the leader's prev_log_term.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: AppendEntries Consistency Check and Replication] \\
-        (Leader $\xrightarrow{Args}$ Follower $\rightarrow$ Local Verification $\xrightarrow{Reply}$ Leader)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The replication logic implemented in the \texttt{AppendEntries} method. The system identifies conflicts by checking preceding log metadata before appending new entries.}
-    \label{fig:append_entries_logic}
-\end{figure}
-
-The logic illustrated in Figure \ref{fig:append_entries_logic} is implemented in the server's \texttt{AppendEntries} handler. When a conflict is detected (e.g., the follower's log does not match the leader's prefix), the system must return a failure status along with conflict metadata (\texttt{conflict\_index} and \texttt{conflict\_term}) to allow the leader to rapidly synchronize the logs \cite{13}.
+The logic is implemented in the server's \texttt{AppendEntries} handler. When a conflict is detected (e.g., the follower's log does not match the leader's prefix), the system must return a failure status along with conflict metadata (\texttt{conflict\_index} and \texttt{conflict\_term}) to allow the leader to rapidly synchronize the logs.
 
 \subsection{Leader Election and Discovery}
 The system must be capable of autonomously electing a leader to ensure progress. This requirement is supported by the \texttt{RequestVote} RPC and a state machine that manages transitions between \texttt{Follower}, \texttt{Candidate}, and \texttt{Leader} states \cite{raft_types}.
 
 \paragraph{Election Mechanics}
-To prevent "split vote" scenarios where no candidate achieves a majority, the system implements randomized election timeouts. In the current implementation, nodes wait for a duration between a minimum bound (\texttt{electionTimeoutMin}) and a randomized offset (\texttt{electionTimeoutRand}) before initiating an election \cite{raft_go}. A candidate wins the election only if it receives a \texttt{vote\_granted} response from a majority of the cluster \cite{10}.
+To prevent "split vote" scenarios where no candidate achieves a majority, the system implements randomized election timeouts. In the current implementation, nodes wait for a duration between a minimum bound (\texttt{electionTimeoutMin}) and a randomized offset (\texttt{electionTimeoutRand}) before initiating an election \cite{Raft2014}. A candidate wins the election only if it receives a \texttt{vote\_granted} response from a majority of the cluster \cite{10}.
 
 \paragraph{Leader Discovery}
 Clients must be able to discover the current leader to submit requests. As specified in the KV API, if a node receives a request but is not the leader, it must return an \texttt{ERR\_WRONG\_LEADER} status accompanied by a \texttt{leader\_hint} pointing to the last known leader \cite{19, 21}. This ensures that client routing is efficient and minimizes the latency associated with trial-and-error discovery.
@@ -102,7 +87,7 @@ The requirements for snapshotting include:
 \end{tabular}
 \end{table}
 
-The metadata described in Table \ref{tab:snapshot_metadata} allows a lagging follower to reset its state to a known consistent point. Once the snapshot is installed, the follower resumes normal operation, using the \texttt{last\_included\_index} as the new starting point for its logical log \cite{raft_go}. This mechanism ensures that the cluster can maintain long-term stability without unbounded resource consumption.
+The metadata described in Table \ref{tab:snapshot_metadata} allows a lagging follower to reset its state to a known consistent point. Once the snapshot is installed, the follower resumes normal operation, using the \texttt{last\_included\_index} as the new starting point for its logical log \cite{Raft2014}. This mechanism ensures that the cluster can maintain long-term stability without unbounded resource consumption.
 
 \section{Non-Functional Requirements (NFR)}
 Beyond the basic command-and-control interface, the system must adhere to strict operational constraints to be viable for production use. These requirements focus on the "safety" and "liveness" of the distributed state.
@@ -117,23 +102,8 @@ In the context of this thesis, the system must remain linearizable even in the p
     \item \textbf{Partition Handling}: During a "split-brain" scenario where the network is divided into two or more isolated groups, only the group containing a majority (quorum) of nodes should be allowed to process writes, as depicted in Figure \ref{fig:partition_linearizability}.
 \end{itemize}
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a diagram showing a partitioned 5-node cluster.
-    % Side A (3 nodes): Has Majority, can reach consensus.
-    % Side B (2 nodes): Minority, operations fail or time out to preserve consistency.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Linearizability during Network Partition] \\
-        (Cluster split into Majority vs. Minority partitions)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{System behavior during a network partition. The minority partition ceases to commit new entries to prevent state divergence.}
-    \label{fig:partition_linearizability}
-\end{figure}
-
-As illustrated in Figure \ref{fig:partition_linearizability}, the requirement for linearizability necessitates that the system sacrifice availability for a subset of the cluster during a partition. If a node cannot contact a majority, it must stop accepting client requests to avoid "stale" state transitions. This behavior ensures that the system maintains a single global order of events, a property verified in this project using chaos testing frameworks like Porcupine \cite{27}.
+The requirement for linearizability necessitates that the system sacrifice availability for a subset of the cluster during a partition.
+If a node cannot contact a majority, it must stop accepting client requests to avoid "stale" state transitions. This behavior ensures that the system maintains a single global order of events, a property verified in this project using chaos testing frameworks like Porcupine \cite{27}.
 
 \subsection{Fault Tolerance (Maintaining Quorum)}
 The system must continue to operate correctly as long as a simple majority of nodes are functional and can communicate. This is known as the quorum requirement, where a cluster of $2n+1$ nodes can tolerate up to $n$ failures.
@@ -172,23 +142,8 @@ The use of gRPC provides several key advantages:
     \item \textbf{Efficient Serialization}: Protocol Buffers provide a compact binary format that is significantly more efficient than text-based formats like JSON or XML, reducing the network overhead during intensive log replication or snapshot transfers.
 \end{itemize}
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a diagram showing the gRPC Interoperability Layer.
-    % Show [Java Client] --(gRPC/Protobuf)--> [Go Server].
-    % Highlight how the .proto file acts as the bridge.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: gRPC Interoperability Layer] \\
-        (Java Clerk Client $\longleftrightarrow$ Protobuf Interface $\longleftrightarrow$ Go Raft Server)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{Cross-language communication architecture. The Protocol Buffer definitions allow diverse client implementations to interact with the Go consensus engine.}
-    \label{fig:grpc_interop}
-\end{figure}
-
-The architecture shown in Figure \ref{fig:grpc_interop} demonstrates how the system's core logic is decoupled from its transport layer. By relying on gRPC, the implementation can evolve internally (e.g., changing the Raft state machine) without breaking compatibility with existing clients, provided the protobuf interface remains stable.
+This architecture demonstrates how the system's core logic is decoupled from its transport layer.
+By relying on gRPC, the implementation can evolve internally without breaking compatibility with existing clients, provided the protobuf interface remains stable.
 
 \subsection{Observability: Structured Logging and Metric Exporting}
 In a distributed system, traditional debugging is often insufficient due to the non-deterministic nature of network events and concurrent state transitions. Consequently, the system must implement a high level of observability through structured logging and real-time metric exporting.
@@ -231,23 +186,8 @@ As shown in the \texttt{StartNode} routine \cite{node_go}, the orchestrator perf
     \item \textbf{Server Management}: It initializes the gRPC server and registers both the KV service (for clients) and the Raft service (for peer communication) on a single network port \cite{node_go}.
 \end{itemize}
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a High-Level Architecture Diagram.
-    % Should show [Client] -> [Cluster of Nodes]. 
-    % Inside a node, show [Orchestrator] managing [Raft], [RSM], and [gRPC].
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: High-Level System Architecture] \\
-        (Cluster Topology and Orchestration Layer)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The high-level architecture of the cluster. The orchestrator layer ensures that all components are correctly initialized and connected.}
-    \label{fig:high_level_arch}
-\end{figure}
-
-The architecture depicted in Figure \ref{fig:high_level_arch} highlights the symmetry of the system. Every node runs an identical set of services, allowing any node to take on the role of leader or follower dynamically based on the Raft election results.
+This high-level architecture highlights the symmetry of the system.
+Every node runs an identical set of services, allowing any node to take on the role of leader or follower dynamically based on the Raft election results.
 
 \subsection{Node Orchestration and Topology: Encapsulation of Layers}
 A single node in our system is a self-contained unit that encapsulates three distinct layers: Consensus, Application, and Transport. This encapsulation is realized through the \texttt{Node} structure, which acts as the "brain" of the server \cite{node_go}.
@@ -255,27 +195,12 @@ A single node in our system is a self-contained unit that encapsulates three dis
 The internal topology of a node is defined by the interaction between these layers:
 \begin{enumerate}
     \item \textbf{Transport Layer (gRPC)}: Acts as the entry point for all external stimuli. It receives RPC calls from both clients and peer nodes, delegating them to the appropriate internal module \cite{node_go}.
-    \item \textbf{Consensus Layer (Raft)}: Manages the replication of logs and ensures agreement across the cluster. It is isolated from the application logic, only knowing how to replicate opaque byte arrays \cite{raft_go}.
+    \item \textbf{Consensus Layer (Raft)}: Manages the replication of logs and ensures agreement across the cluster. It is isolated from the application logic, only knowing how to replicate opaque byte arrays \cite{Raft2014}.
     \item \textbf{Application Layer (RSM + Store)}: Contains the actual key-value state machine. It consumes committed entries from the consensus layer and applies them to the local data store \cite{rsm_go}.
 \end{enumerate}
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a Node-Internal Topology Diagram.
-    % Show the layering: [gRPC] <-> [RSM] <-> [Raft].
-    % Use arrows to show the flow: Request -> gRPC -> RSM -> Raft -> RSM -> Store.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Internal Node Topology] \\
-        (Encapsulation of Transport, RSM, and Consensus Layers)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The internal structure of a single cluster node. The layers are loosely coupled to ensure that consensus logic remains independent of the application state.}
-    \label{fig:node_topology}
-\end{figure}
-
-As illustrated in Figure \ref{fig:node_topology}, the communication between these layers is primarily asynchronous. When a request arrives via gRPC, it is passed to the RSM, which then submits it to the Raft core. The Raft core subsequently notifies the RSM of the result via a dedicated channel once consensus is achieved. This design ensures that the gRPC server remains responsive, even during heavy log replication or temporary network delays.
+The communication between these layers is primarily asynchronous.
+When a request arrives via gRPC, it is passed to the RSM, which then submits it to the Raft core. The Raft core subsequently notifies the RSM of the result via a dedicated channel once consensus is achieved. This design ensures that the gRPC server remains responsive, even during heavy log replication or temporary network delays.
 
 \subsection{The Replicated State Machine (RSM) Layer}
 The Replicated State Machine (RSM) layer acts as a mediator between the raw consensus logic of Raft and the high-level application logic of the key-value store. Its primary responsibility is to "buffer" and process log entries that have been committed by the Raft cluster.

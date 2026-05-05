@@ -68,84 +68,26 @@ The clear separation of states shown in Table \ref{tab:operation_states} allows 
 To manage the complexity of a distributed system, the implementation employs several architectural design patterns. These patterns facilitate modularity, simplify testing through mocking, and ensure that the system's core consensus logic remains decoupled from specific transport or storage implementations.
 
 \subsection{The Command Pattern: Encapsulating Requests}
-The system utilizes the Command pattern to represent client operations as discrete objects that can be replicated and executed. In the RSM layer, every client request is encapsulated into an \texttt{Op} structure.
+The system utilizes the Command pattern to represent client operations as discrete objects that can be replicated and executed.
+In the RSM layer, every client request is encapsulated into an \texttt{Op} structure.
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add command-pattern.png here.
-    % This diagram should show the Client, the Invoker (gRPC), and the Command (Op) being passed to the Receiver (State Machine).
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Command Pattern for Client Operations] \\
-        (Encapsulation of Get/Put into a unified Op structure)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The Command pattern implementation. By wrapping requests into a common \texttt{Op} interface, the consensus engine can replicate them without needing to understand the underlying application logic.}
-    \label{fig:command_pattern}
-\end{figure}
-
-As shown in Figure \ref{fig:command_pattern}, the use of the Command pattern allows the Raft log to store a sequence of opaque \texttt{Op} objects. When the \texttt{applier} routine retrieves these entries from the log, it does not need to distinguish between a \texttt{Get} or a \texttt{Put} operation; it simply passes the command to the state machine's \texttt{DoOp} method for execution.
+The use of the Command pattern allows the Raft log to store a sequence of opaque \texttt{Op} objects. When the \texttt{applier} routine retrieves these entries from the log, it does not need to distinguish between a \texttt{Get} or a \texttt{Put} operation; it simply passes the command to the state machine's \texttt{DoOp} method for execution.
 
 \subsection{The Observer Pattern: Asynchronous Notifications}
 While not a traditional class-based implementation, the relationship between the Raft core and the RSM follows the Observer pattern principles using Go's channel primitives. The Raft core acts as the subject, while the RSM acts as the observer that reacts to committed state changes.
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add observer-diagram.png here.
-    % Should show Raft Core (Subject) pushing ApplyMsg to the applyCh, which is watched by the RSM (Observer).
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Observer-style Notification via Go Channels] \\
-        (Raft Subject $\rightarrow$ applyCh $\rightarrow$ RSM Observer)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The Observer pattern realized through channels. This design allows the consensus module to notify the application of new commits without creating a circular dependency.}
-    \label{fig:observer_pattern}
-\end{figure}
-
-The mechanism illustrated in Figure \ref{fig:observer_pattern} utilizes the \texttt{applyCh} as the notification medium. This decoupling is vital for system liveness; the Raft core can continue to process heartbeats and manage elections even if the RSM is temporarily blocked by a slow state machine operation, as the notification process is asynchronous.
+The mechanism utilizes the \texttt{applyCh} as the notification medium. This decoupling is vital for system liveness; the Raft core can continue to process heartbeats and manage elections even if the RSM is temporarily blocked by a slow state machine operation, as the notification process is asynchronous.
 
 \subsection{The Adapter Pattern: Protocol Translation}
 The system uses the Adapter pattern to bridge the gap between the external gRPC service definitions and the internal Raft implementation. This is primarily handled within the \texttt{raftransport} package.
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add adapter.png here.
-    % Show the RaftService acting as an Adapter between kvpb.RequestVoteArgs (Protobuf) and raft.RequestVoteArgs (Internal).
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Adapter Pattern for gRPC Communication] \\
-        (gRPC Protobuf Types $\longleftrightarrow$ Adapter $\longleftrightarrow$ Internal Raft Types)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The Adapter pattern in the transport layer. The \texttt{RaftService} adapts gRPC-generated structures to the internal domain models used by the consensus engine.}
-    \label{fig:adapter_pattern}
-\end{figure}
-
-As depicted in Figure \ref{fig:adapter_pattern}, the \texttt{RaftService} translates incoming gRPC messages, such as \texttt{AppendEntriesArgs}, into the internal structures required by the \texttt{Raft} module. This ensures that the core consensus logic is not "polluted" with networking-specific code or third-party protobuf types, making the system easier to maintain and test in isolation.
+The \texttt{RaftService} translates incoming gRPC messages, such as \texttt{AppendEntriesArgs}, into the internal structures required by the \texttt{Raft} module. This ensures that the core consensus logic is not "polluted" with networking-specific code or third-party protobuf types, making the system easier to maintain and test in isolation.
 
 \subsection{The Strategy Pattern: Pluggable Persistence}
-To support different storage backends, the implementation employs the Strategy pattern for its persistence layer. The Raft core does not interact with the file system directly; instead, it relies on a \texttt{Persister} interface.
+To support different storage backends, the implementation employs the Strategy pattern for its persistence layer.
+The Raft core does not interact with the file system directly; instead, it relies on a \texttt{Persister} interface.
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add strategy-diagram.png here.
-    % Show the Raft core using the Persister interface, with FilePersister and MockPersister as concrete strategies.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Strategy Pattern for Persistence] \\
-        (Raft Core $\rightarrow$ Persister Interface $\leftarrow$ [FilePersister | MockPersister])
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The Strategy pattern for state persistence. This allows the system to switch between high-performance file storage and in-memory mock storage for unit testing.}
-    \label{fig:strategy_pattern}
-\end{figure}
-
-The design shown in Figure \ref{fig:strategy_pattern} highlights the flexibility of the architecture. In production, a \texttt{FilePersister} is used to ensure durability across restarts. However, during development and continuous integration, a memory-based mock strategy can be injected into the Raft core, allowing for significantly faster test execution and the ability to simulate disk failures or corruption scenarios without physical hardware constraints.
+This design highlights the flexibility of the architecture. In production, a \texttt{FilePersister} is used to ensure durability across restarts. However, during development and continuous integration, a memory-based mock strategy can be injected into the Raft core, allowing for significantly faster test execution and the ability to simulate disk failures or corruption scenarios without physical hardware constraints.
 
 \section{Ensuring Linearizability}
 \label{sec:linearizability_impl}
@@ -154,22 +96,7 @@ Linearizability is a core requirement for our system, ensuring that the key-valu
 \subsection{Unique Request Identification in the RSM}
 When a client submits an operation, the RSM layer must ensure that it can correctly associate the eventual commit of that operation with the original request. As seen in the \texttt{RSM.Submit} implementation \cite{rsm_go}, every operation is wrapped in an \texttt{Op} structure containing a unique 64-bit identifier (\texttt{Id}) generated via a cryptographically secure random number generator.
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add a diagram showing the Request Matching via Op.Id.
-    % Show Clerk -> Leader (Op.Id=123) -> Raft Log -> RSM Applier (Op.Id=123) -> Match with Pending -> Response.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Request-Response Matching using Unique Identifiers] \\
-        (Ensuring the correct client receives the response for its specific request)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The request matching mechanism. The \texttt{Op.Id} ensures that even if leadership changes, a node only responds to a client if the applied log entry matches the one it originally submitted.}
-    \label{fig:request_matching}
-\end{figure}
-
-The \texttt{Id} shown in Figure \ref{fig:request_matching} serves as a tracking token. In the \texttt{notifyPending} method, the server compares the ID of the applied entry with the ID in its \texttt{pending} map \cite{rsm_go}. If they match, the result is returned to the client; otherwise, an error is returned, forcing the client to retry. This prevent a client from receiving a response for a different operation that happened to occupy the same log index after a leader transition.
+The \texttt{Id} serves as a tracking token. In the \texttt{notifyPending} method, the server compares the ID of the applied entry with the ID in its \texttt{pending} map \cite{rsm_go}. If they match, the result is returned to the client; otherwise, an error is returned, forcing the client to retry. This prevent a client from receiving a response for a different operation that happened to occupy the same log index after a leader transition.
 
 \subsection{Optimistic Versioning to Prevent Duplicate Execution}
 While the \texttt{Op.Id} handles request matching, we must also prevent the duplicate execution of write operations. If a client retries a \texttt{Put} request because a previous attempt timed out, the state machine must detect if the first attempt actually succeeded.
@@ -203,22 +130,7 @@ This mechanism ensures that the disk footprint of a node remains proportional to
 \subsection{Persistence and the Strategy Pattern}
 To manage the storage of the Raft state (term, vote, and log) and the state machine snapshots, the project utilizes the **Strategy Pattern** for the persistence layer. The Raft core is decoupled from the storage medium by the \texttt{Persister} interface \cite{raftapi_go}.
 
-\begin{figure}[h]
-    \centering
-    % TODO: Add strategy-diagram.png here if not used earlier, or reference it.
-    % Highlight the FilePersister implementation.
-    \fbox{\begin{minipage}{0.8\textwidth}
-        \centering
-        \vspace{2cm}
-        [Diagram: Persistence Strategy Implementation] \\
-        (Raft Core $\rightarrow$ Persister Interface $\rightarrow$ FilePersister)
-        \vspace{2cm}
-    \end{minipage}}
-    \caption{The Strategy pattern applied to persistence. The \texttt{FilePersister} provides atomic writes to ensure state integrity during power failures.}
-    \label{fig:persistence_strategy}
-\end{figure}
-
-As illustrated in Figure \ref{fig:persistence_strategy}, the system's default strategy is the \texttt{FilePersister} \cite{disk_persister_go}. This implementation ensures durability by using an \texttt{atomicWrite} approach:
+The system's default strategy is the \texttt{FilePersister} \cite{disk_persister_go}. This implementation ensures durability by using an \texttt{atomicWrite} approach:
 \begin{itemize}
     \item \textbf{Temporary Files}: Data is first written to a temporary file (\texttt{.tmp}).
     \item \textbf{Synchronized Write}: The \texttt{f.Sync()} method is called to flush the OS buffers to physical media.
