@@ -1,0 +1,56 @@
+\chapter{Introduction}
+\label{intro}
+
+Introduction
+% Modern enterprise applications and cloud infrastructures have shifted from monolithic, single-server architectures to complex, distributed systems. As the demand for massive scalability and 24/7 uptime increases, the necessity to distribute data across multiple physical nodes has become unavoidable. However, this transition introduces a fundamental challenge: how do we ensure that a collection of independent, unreliable computers behaves like a single, consistent, and highly available system?
+
+% \section{Motivation}
+% \label{sec:motivation}
+
+% The primary motivation for this thesis is to explore the challenges of managing distributed state in environments where failures are not exceptions, but the norm. In a standard client-server architecture, a single server often acts as the "source of truth." If that server fails, the entire application becomes unavailable, leading to significant downtime. 
+
+% To mitigate this, developers replicate data across multiple servers. However, replication introduces the problem of \textit{consistency}: how can the system ensure that all replicas agree on the order and content of operations? This is where consensus algorithms, specifically the Raft Consensus Algorithm, become essential. 
+
+% Raft provides a structured, understandable, and robust method for managing a \textbf{Replicated State Machine (RSM)}. By ensuring that all nodes in a cluster agree on a sequence of commands, Raft enables the construction of systems that can tolerate the failure of a minority of nodes without sacrificing correctness. This implementation aims to demonstrate that such systems can move beyond theoretical academic concepts and be deployed as practical, high-performance backends using modern communication protocols like gRPC.
+
+% \section{Problem Statement}
+% \label{sec:problem_statement}
+
+% While the benefits of distributed systems are clear, implementing them is notoriously difficult due to the inherent unreliability of networks and hardware. The core problem lies in the difficulty of achieving \textit{consensus}, the process of getting a group of nodes to agree on a single data value or a sequence of operations.
+
+% \subsection{The Complexity of Distributed Consensus}
+% Distributed consensus is fundamentally constrained by several laws of computer science:
+
+% \begin{itemize}
+%     \item \textbf{The FLP Impossibility Result:} Fischer, Lynch, and Paterson (1985) proved that in a fully asynchronous system, it is impossible to guarantee consensus if even a single node fails \cite{FLP1985}. This means that any practical implementation must make trade-offs regarding timing assumptions to ensure progress.
+%     \item \textbf{Network Partitions:} In a distributed environment, network links are inherently unreliable. Partitions can occur, isolating segments of the cluster. A robust system must handle these "split-brain" scenarios where different parts of the network believe they have authority, potentially leading to data corruption if not handled strictly.
+%     \item \textbf{Linearizability:} Ensuring that an operation appears to take effect instantaneously between its invocation and its response is difficult when multiple nodes are involved. Achieving this level of consistency, known as \textit{linearizability}, is the "gold standard" for distributed key-value stores but requires significant overhead in message coordination.
+% \end{itemize}
+
+% \section{Thesis Objectives}
+% \label{sec:objectives}
+
+% The central objective of this research is to design and implement a production-grade, distributed key-value storage system that guarantees linearizability and high availability. To achieve this, the project focuses on several key technical milestones:
+
+% \begin{itemize}
+%     \item \textbf{Core Consensus Implementation:} Developing a robust version of the Raft algorithm in Go, specifically addressing leader election, log replication, and safety mechanisms to maintain a consistent state across a dynamic cluster.
+%     \item \textbf{Replicated State Machine (RSM) Integration:} Designing an RSM layer that effectively decouples the consensus log from the application-specific key-value logic, allowing for deterministic command execution.
+%     \item \textbf{High-Performance Communication:} Utilizing \textbf{gRPC} and Protocol Buffers to facilitate low-latency, strongly-typed communication between cluster nodes and between clients and the leader.
+%     \item \textbf{Cross-Platform Interoperability:} Implementing client SDKs (Clerks) in both \textbf{Go and Java} to demonstrate the system's ability to serve heterogeneous environments through a unified API.
+%     \item \textbf{Automation and Fault Injection:} Creating an orchestration framework using shell scripting to automate cluster deployment and verify system resilience through simulated node failures and network partitions.
+% \end{itemize}
+
+% \section{Thesis Structure}
+% \label{sec:structure}
+
+% The remainder of this thesis is organized as follows:
+
+% \textbf{Chapter 3: The Raft Consensus Algorithm} provides a deep dive into the theoretical foundations of the Raft protocol. It explains the lifecycle of a term, the mechanics of leader election, and the safety invariants that prevent state divergence.
+
+% \textbf{Chapter 4: System Architecture and Design} details the high-level components of the KVRaft system. This chapter describes the interaction between the gRPC transport layer, the Raft consensus module, and the Key-Value state machine.
+
+% \textbf{Chapter 5: Implementation Details} discusses the practical aspects of the codebase. It covers the challenges of concurrency in Go, the implementation of the Clerk's retry logic, and the integration of the Java-based client.
+
+% \textbf{Chapter 6: Evaluation and Testing} presents the results of rigorous stress tests. It analyzes system performance in terms of latency and throughput while demonstrating the cluster's ability to recover from various failure scenarios.
+
+% \textbf{Chapter 7: Conclusions} summarizes the contributions of the work and suggests potential avenues for future improvements, such as sharding and persistent storage optimization.

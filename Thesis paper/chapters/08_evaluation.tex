@@ -1,0 +1,139 @@
+\chapter{Verification, Evaluation, and Observability}
+\label{ch:verification}
+
+The complexity of distributed consensus makes manual verification impossible. This chapter details the multi-layered testing strategy employed to validate the system's correctness, performance, and operational visibility.
+
+\section{Correctness Testing}
+To guarantee that the implementation adheres to the Raft specification, the project utilizes a comprehensive test suite that simulates the unpredictable nature of real-world networks. The testing framework focuses on three pillars: foundational protocol tests, chaos simulation, and formal linearizability verification.
+
+\subsection{Foundational Testing: MIT 6.824 Methodology}
+The core consensus logic is verified using a test suite inspired by the MIT 6.824 Distributed Systems curriculum. These tests target specific subproblems of the Raft protocol in isolation:
+
+\begin{itemize}
+    \item \textbf{Election Safety}: Tests such as \texttt{TestInitialElection} and \texttt{TestReelection} verify that a cluster successfully elects a single leader and maintains that leadership through terms.
+    \item \textbf{Log Reconciliation}: Tests like \texttt{TestBasicAgree} and \texttt{TestFailAgree} ensure that the leader can correctly synchronize logs even when followers are temporarily offline or possess conflicting entries.
+    \item \textbf{Persistence and Recovery}: The \texttt{TestPersist} series validates that nodes can resume operation after a crash without losing committed data or violating safety invariants.
+\end{itemize}
+
+\subsection{Chaos Simulation and Unreliable Networks}
+To simulate the "adversarial" nature of distributed environments, the project implements a custom \texttt{Network} simulator located in the \texttt{testutils} package. This simulator allows the test suite to programmatically induce network failures:
+
+\begin{itemize}
+    \item \textbf{Network Partitions}: Nodes are split into isolated groups (e.g., a 3-node majority and a 2-node minority) to verify that the system remains linearizable.
+    \item \textbf{Packet Loss and Delays}: RPCs are randomly dropped or delayed to ensure the consensus engine is robust against high latency and message reordering.
+    \item \textbf{Server Crashes}: Nodes are abruptly killed and restarted during active replication to verify the durability of the state machine.
+\end{itemize}
+
+\begin{figure}[h]
+    \centering
+    % TODO: Add a diagram showing the Chaos Testing Architecture.
+    % Show [Test Runner] injecting [Partitions/Crashes] into a [Cluster] while [Clerk] sends requests.
+    \fbox{\begin{minipage}{0.8\textwidth}
+        \centering
+        \vspace{2cm}
+        [Diagram: Chaos Testing and Network Simulation Framework] \\
+        (Simulating partitions and crashes during active KV operations)
+        \vspace{2cm}
+    \end{minipage}}
+    \caption{The chaos testing architecture. The framework simultaneously performs data operations while introducing network-level disturbances to test the system's resilience.}
+    \label{fig:chaos_testing}
+\end{figure}
+
+As illustrated in Figure \ref{fig:chaos_testing}, the chaos engine operates concurrently with the client. This "stress testing" ensures that edge cases—such as a leader failing exactly at the moment of commitment—are correctly handled without data loss.
+
+\subsection{Linearizability Verification with Porcupine}
+While standard tests check for specific failure modes, they cannot prove that every execution trace is linearizable. To achieve this, the project integrates the \textbf{Porcupine} linearizability checker.
+
+The verification process follows three steps:
+\begin{enumerate}
+    \item \textbf{Trace Logging}: During chaos tests, the system records every request's start time, end time, and result (invocation and response).
+    \item \textbf{Model Definition}: A formal model of a sequential key-value store is provided to Porcupine, defining the expected output for every \texttt{Get} and \texttt{Put} operation.
+    \item \textbf{Trace Validation}: Porcupine analyzes the concurrent logs to determine if there exists a valid sequential execution that respects the real-time ordering of the operations.
+\end{enumerate}
+
+\begin{table}[h]
+\centering
+\caption{Results of Chaos and Linearizability Stress Tests.}
+\label{tab:test_results}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{Test Category} & \textbf{Nodes} & \textbf{Chaos Type} & \textbf{Status} \\ \hline
+MIT Raft Suite & 3--5 & Re-elections, Partitions & PASS \\ \hline
+KV Stress & 3 & Concurrent Put/Get & PASS \\ \hline
+Linearizability Chaos & 5 & Partitions + Server Crashes & PASS \\ \hline
+Snapshot Stress & 3 & High-load with Compaction & PASS \\ \hline
+\end{tabular}
+\end{table}
+
+The status summarized in Table \ref{tab:test_results} confirms that the implementation maintains strict consistency. By passing the Porcupine verification even under severe network partitions, we demonstrate that the "strong leader" and "quorum commitment" logic correctly implement the linearizable consistency model required for a reliable distributed state machine.
+
+\section{Performance Analysis}
+\label{sec:performance_analysis}
+To evaluate the efficiency of the implementation, a series of benchmarks were conducted focusing on latency, throughput, and recovery speed. These tests were performed using the automated deployment framework on a 5-node cluster.
+
+\subsection{Latency Comparisons: 3 vs. 5 Nodes}
+The latency of a \texttt{Put} operation is directly affected by the number of nodes in the cluster, as the leader must wait for a majority to acknowledge the entry before committing. 
+
+\begin{table}[h]
+\centering
+\caption{Average latency for a \texttt{Put} operation across different cluster sizes.}
+\label{tab:latency_comparison}
+\begin{tabular}{|l|l|l|}
+\hline
+\textbf{Cluster Size} & \textbf{Quorum Size} & \textbf{Avg. Latency (ms)} \\ \hline
+3 Nodes & 2 Nodes & [Value] ms \\ \hline
+5 Nodes & 3 Nodes & [Value] ms \\ \hline
+\end{tabular}
+\end{table}
+
+As shown in Table \ref{tab:latency_comparison}, increasing the cluster size from 3 to 5 nodes typically results in a slight increase in latency. This is expected behavior in Raft, as the leader must wait for responses from more followers to satisfy the quorum requirement. However, the 5-node cluster provides higher fault tolerance, surviving the simultaneous failure of two nodes.
+
+
+
+\subsection{Throughput: Read-Heavy vs. Write-Heavy Workloads}
+Throughput was measured by executing a sustained volume of operations. The system's performance varies significantly based on the ratio of \texttt{Get} to \texttt{Put} requests.
+
+\begin{itemize}
+    \item \textbf{Write-Heavy (80\% Put)}: Performance is limited by the I/O bottleneck of persisting logs to disk and the network round-trip time required for consensus.
+    \item \textbf{Read-Heavy (80\% Get)}: While reads in this implementation still pass through the Raft log to ensure strict linearizability, they generally exhibit lower latency than writes because the state machine does not need to update its persistent version.
+\end{itemize}
+
+
+
+\subsection{Recovery Time Analysis}
+A critical metric for a high-availability system is the time required to resume normal operation after a leader crash. This depends on the detection of the failure via heartbeat timeouts and the completion of a new election.
+
+\begin{figure}[h]
+    \centering
+    % TODO: Add a graph showing throughput drop during leader failure and recovery.
+    \fbox{\begin{minipage}{0.8\textwidth}
+        \centering
+        \vspace{2cm}
+        [Diagram: Recovery Time After Leader Failure] \\
+        (Throughput Drop $\rightarrow$ Election Duration $\rightarrow$ Recovery)
+        \vspace{2cm}
+    \end{minipage}}
+    \caption{System recovery lifecycle. The gap represents the period where no leader is active and client requests are retried by the Clerk.}
+    \label{fig:recovery_time}
+\end{figure}
+
+The recovery process illustrated in Figure \ref{fig:recovery_time} is governed by the \texttt{electionTimer} settings in the configuration. By tuning the \texttt{RAFT\_ELECTION\_TIMEOUT\_MIN} and \texttt{RAFT\_ELECTION\_TIMEOUT\_RAND} parameters, the system can balance between rapid failure detection and the risk of frequent unnecessary elections due to network jitter.
+
+\section{Observability and Metrics}
+\label{sec:observability}
+The system integrates a modern monitoring stack to provide real-time insights into the distributed state. This is achieved through the combination of Prometheus for metrics, Loki for logs, and Grafana for visualization.
+
+\subsection{Metric Collection with Prometheus}
+Each node exports instrumentation data that is periodically scraped by Prometheus. This allows for the tracking of critical consensus invariants:
+\begin{itemize}
+    \item \textbf{Commit Indices}: The \texttt{raft\_commit\_index} and \texttt{raft\_last\_applied} gauges allow operators to monitor replication lag and ensure that nodes are making progress.
+    \item \textbf{Leadership Transitions}: The \texttt{raft\_leader\_changes\_total} counter provides a history of term changes, which is vital for diagnosing cluster instability.
+    \item \textbf{Node State}: The \texttt{raft\_state} gauge (0=Follower, 1=Candidate, 2=Leader) provides an instant view of the cluster topology.
+\end{itemize}
+
+\subsection{Log Aggregation with Loki and Visualization in Grafana}
+Structured logs produced by the \texttt{zap} logger are ingested by Promtail and forwarded to Loki. This centralized log repository enables searching for specific request IDs or terms across the entire cluster.
+
+
+
+As seen in the integrated dashboard in Figure \ref{fig:grafana_dashboard}, these tools provide a comprehensive "control room" for the distributed system. By correlating metrics and logs, we can verify that the system is functioning as intended, such as ensuring that the \texttt{commitIndex} only advances when a majority of nodes have acknowledged the data.
