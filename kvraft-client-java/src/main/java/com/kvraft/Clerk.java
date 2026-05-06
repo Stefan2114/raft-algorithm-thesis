@@ -48,7 +48,7 @@ public class Clerk implements AutoCloseable {
                 .setKey(key)
                 .build();
 
-        return callWithRetry(stub -> stub.get(request), lastLeader.get(), 0)
+        return callWithRetry(stub -> stub.get(request), lastLeader.get(), 0, false)
                 .thenApply(resp -> {
                     if (resp.getStatus() == Status.OK) {
                         return new GetResult(resp.getValue(), resp.getVersion());
@@ -69,7 +69,7 @@ public class Clerk implements AutoCloseable {
                 .setVersion(version)
                 .build();
 
-        return callWithRetry(stub -> stub.put(request), lastLeader.get(), 0)
+        return callWithRetry(stub -> stub.put(request), lastLeader.get(), 0, false)
                 .thenAccept(resp -> {
                     if (resp.getStatus() != Status.OK) {
                         throw KVRaftException.fromStatus(resp.getStatus());
@@ -80,7 +80,7 @@ public class Clerk implements AutoCloseable {
     /**
      * Internal retry mechanism for finding the leader and handling network blips.
      */
-    private <T> CompletableFuture<T> callWithRetry(Function<KVGrpc.KVFutureStub, ListenableFuture<T>> rpcCall, int serverIndex, int attempt) {
+    private <T> CompletableFuture<T> callWithRetry(Function<KVGrpc.KVFutureStub, ListenableFuture<T>> rpcCall, int serverIndex, int attempt, boolean potentiallyProcessed) {
         CompletableFuture<T> result = new CompletableFuture<>();
         KVGrpc.KVFutureStub stub = stubs.get(serverIndex);
 
@@ -93,23 +93,28 @@ public class Clerk implements AutoCloseable {
 
                 if (status == Status.ERR_WRONG_LEADER) {
                     int hint = getLeaderHintFromResponse(response);
-                    retry(hint >= 0 && hint < totalNodes && hint != serverIndex ? hint : (serverIndex + 1) % totalNodes);
+                    retry(hint >= 0 && hint < totalNodes && hint != serverIndex ? hint : (serverIndex + 1) % totalNodes, potentiallyProcessed);
                 } else {
                     lastLeader.set(serverIndex);
-                    result.complete(response);
+                    if (status == Status.ERR_VERSION && potentiallyProcessed) {
+                        result.complete(setMaybeStatus(response));
+                    } else {
+                        result.complete(response);
+                    }
                 }
             }
 
             @Override
             public void onFailure(@Nonnull Throwable t) {
-                retry((serverIndex + 1) % totalNodes);
+                // If we fail with a network error/timeout, we don't know if the request was processed
+                retry((serverIndex + 1) % totalNodes, true);
             }
 
-            private void retry(int nextServerIndex) {
+            private void retry(int nextServerIndex, boolean nextPotentiallyProcessed) {
                 if (attempt > 0 && attempt % totalNodes == 0) {
                     try { Thread.sleep(50); } catch (InterruptedException ignored) {}
                 }
-                callWithRetry(rpcCall, nextServerIndex, attempt + 1).whenComplete((res, err) -> {
+                callWithRetry(rpcCall, nextServerIndex, attempt + 1, nextPotentiallyProcessed).whenComplete((res, err) -> {
                     if (err != null) result.completeExceptionally(err);
                     else result.complete(res);
                 });
@@ -117,6 +122,16 @@ public class Clerk implements AutoCloseable {
         }, MoreExecutors.directExecutor());
 
         return result;
+    }
+
+    @SuppressWarnings("unchecked")
+    private <T> T setMaybeStatus(T response) {
+        if (response instanceof GetResponse) {
+            return (T) ((GetResponse) response).toBuilder().setStatus(Status.ERR_MAYBE).build();
+        } else if (response instanceof PutResponse) {
+            return (T) ((PutResponse) response).toBuilder().setStatus(Status.ERR_MAYBE).build();
+        }
+        return response;
     }
 
     private Status getStatusFromResponse(Object response) {
