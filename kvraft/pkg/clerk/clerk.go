@@ -123,11 +123,12 @@ func (ck *Clerk) Put(key string, value string, version api.TVersion) api.Err {
 				}
 				return api.ErrMaybe
 			case api.ErrWrongLeader:
-				firstAttempt = false
+				// Don't mark as potentially processed if we just hit the wrong leader
 			default:
 				firstAttempt = false
 			}
 		} else {
+			// Network error or timeout: could have been processed
 			firstAttempt = false
 		}
 		tried++
