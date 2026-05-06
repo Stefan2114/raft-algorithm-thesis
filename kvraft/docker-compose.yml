@@ -11,9 +11,9 @@ services:
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
       - LOG_PATH=/logs/node0.log
-      - RAFT_ELECTION_TIMEOUT_MIN=800
+      - RAFT_ELECTION_TIMEOUT_MIN=600
       - RAFT_ELECTION_TIMEOUT_RAND=400
-      - RAFT_HEARTBEAT_TIMEOUT=150
+      - RAFT_HEARTBEAT_TIMEOUT=100
       - RSM_SUBMIT_TIMEOUT=10
       - GRPC_BASE_DELAY=100
       - GRPC_MAX_DELAY=3
@@ -36,9 +36,9 @@ services:
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
       - LOG_PATH=/logs/node1.log
-      - RAFT_ELECTION_TIMEOUT_MIN=800
+      - RAFT_ELECTION_TIMEOUT_MIN=600
       - RAFT_ELECTION_TIMEOUT_RAND=400
-      - RAFT_HEARTBEAT_TIMEOUT=150
+      - RAFT_HEARTBEAT_TIMEOUT=100
       - RSM_SUBMIT_TIMEOUT=10
       - GRPC_BASE_DELAY=100
       - GRPC_MAX_DELAY=3
@@ -61,9 +61,9 @@ services:
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
       - LOG_PATH=/logs/node2.log
-      - RAFT_ELECTION_TIMEOUT_MIN=800
+      - RAFT_ELECTION_TIMEOUT_MIN=600
       - RAFT_ELECTION_TIMEOUT_RAND=400
-      - RAFT_HEARTBEAT_TIMEOUT=150
+      - RAFT_HEARTBEAT_TIMEOUT=100
       - RSM_SUBMIT_TIMEOUT=10
       - GRPC_BASE_DELAY=100
       - GRPC_MAX_DELAY=3
@@ -86,9 +86,9 @@ services:
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
       - LOG_PATH=/logs/node3.log
-      - RAFT_ELECTION_TIMEOUT_MIN=800
+      - RAFT_ELECTION_TIMEOUT_MIN=600
       - RAFT_ELECTION_TIMEOUT_RAND=400
-      - RAFT_HEARTBEAT_TIMEOUT=150
+      - RAFT_HEARTBEAT_TIMEOUT=100
       - RSM_SUBMIT_TIMEOUT=10
       - GRPC_BASE_DELAY=100
       - GRPC_MAX_DELAY=3
@@ -111,9 +111,9 @@ services:
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
       - LOG_PATH=/logs/node4.log
-      - RAFT_ELECTION_TIMEOUT_MIN=800
+      - RAFT_ELECTION_TIMEOUT_MIN=600
       - RAFT_ELECTION_TIMEOUT_RAND=400
-      - RAFT_HEARTBEAT_TIMEOUT=150
+      - RAFT_HEARTBEAT_TIMEOUT=100
       - RSM_SUBMIT_TIMEOUT=10
       - GRPC_BASE_DELAY=100
       - GRPC_MAX_DELAY=3
@@ -137,6 +137,10 @@ services:
     network_mode: "host"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
       - loki
@@ -161,3 +165,4 @@ volumes:
   node2_data:
   node3_data:
   node4_data:
+  grafana_data:
