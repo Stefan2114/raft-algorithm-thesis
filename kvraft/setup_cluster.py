@@ -91,6 +91,10 @@ def main():
     network_mode: "host"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
     depends_on:
       - prometheus
       - loki
@@ -114,6 +118,7 @@ def main():
     for node in nodes:
         node_id = node['id']
         yaml_content += f"  node{node_id}_data:\n"
+    yaml_content += "  grafana_data:\n"
 
     compose_file = "docker-compose.yml"
     with open(compose_file, 'w') as f:
@@ -165,6 +170,58 @@ scrape_configs:
         f.write(promtail_yml)
 
     print("Successfully generated config/prometheus.yml and config/promtail-config.yml")
+
+    # Generate Grafana Provisioning
+    os.makedirs("config/grafana/provisioning/datasources", exist_ok=True)
+    os.makedirs("config/grafana/provisioning/dashboards", exist_ok=True)
+    os.makedirs("config/grafana/dashboards", exist_ok=True)
+
+    grafana_ds_yml = """apiVersion: 1
+datasources:
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://localhost:9090
+    isDefault: true
+  - name: Loki
+    type: loki
+    access: proxy
+    url: http://localhost:3100
+"""
+    with open("config/grafana/provisioning/datasources/ds.yaml", "w") as f:
+        f.write(grafana_ds_yml)
+
+    grafana_dashboards_yml = """apiVersion: 1
+providers:
+  - name: 'Local Dashboards'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+"""
+    # Note: We point to /etc/grafana/provisioning/dashboards inside the container
+    # and we will mount our local config/grafana/dashboards to it if we want persistent JSONs,
+    # but for now, we'll just allow provisioning from the folder we mounted.
+    
+    # Actually, let's fix the path in dashboards.yaml to point to where we will put JSONs.
+    grafana_dashboards_yml = """apiVersion: 1
+providers:
+  - name: 'Default'
+    orgId: 1
+    folder: ''
+    type: file
+    disableDeletion: false
+    editable: true
+    options:
+      path: /var/lib/grafana/dashboards
+"""
+    with open("config/grafana/provisioning/dashboards/dashboards.yaml", "w") as f:
+        f.write(grafana_dashboards_yml)
+
+    print("Successfully generated Grafana provisioning configs in config/grafana/")
 
 if __name__ == "__main__":
     main()
