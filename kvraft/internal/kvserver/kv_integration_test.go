@@ -1,18 +1,19 @@
 package kvserver
 
 import (
-	"github.com/stretchr/testify/assert"
+	"encoding/gob"
 	"kvraft/api"
 	"kvraft/internal/logger"
+	"kvraft/internal/models"
 	"kvraft/internal/raft"
 	"kvraft/internal/rsm"
 	"kvraft/raftapi"
-	"kvraft/testutils"
 	"kvraft/raftransport"
+	"kvraft/testutils"
 	"testing"
 	"time"
-	"encoding/gob"
-	"kvraft/internal/models"
+
+	"github.com/stretchr/testify/assert"
 )
 
 type kvCluster struct {
@@ -37,7 +38,7 @@ func makeKVCluster(n int, maxRaftState int) *kvCluster {
 	for i := 0; i < n; i++ {
 		persisters[i] = testutils.NewMockPersister()
 		stores[i] = NewStore()
-		
+
 		cluster := &kvCluster{net: net, rsms: rsms, rafts: rafts, persisters: persisters, stores: stores, n: n}
 		cluster.startNode(i, maxRaftState)
 	}
@@ -101,7 +102,6 @@ func (c *kvCluster) get(id int, req api.GetArgs, clientId int) (api.Err, api.Get
 
 	reply := api.GetReply{Err: err}
 	if err == api.OK {
-		// In our RSM, Submit returns the value for Get too
 		if v, ok := val.(string); ok {
 			reply.Value = v
 		}
@@ -117,7 +117,7 @@ func (c *kvCluster) get(id int, req api.GetArgs, clientId int) (api.Err, api.Get
 
 func TestKV_Partition(t *testing.T) {
 	c := makeKVCluster(3, -1)
-	
+
 	// Wait for leader
 	leader := -1
 	for i := 0; i < 10; i++ {
@@ -130,12 +130,11 @@ func TestKV_Partition(t *testing.T) {
 	assert.NotEqual(t, -1, leader, "no leader elected")
 	defer c.opLog.Check(t)
 
-	// 1. Progress in majority
 	req1 := api.PutArgs{Key: "k1", Value: "v1", Version: 0}
 	err1, _ := c.submit(leader, req1, 0)
 	assert.Equal(t, api.OK, err1, "Put failed")
 
-	// 2. Partition leader
+	// Partition leader
 	other1 := (leader + 1) % 3
 	other2 := (leader + 2) % 3
 	c.net.Disconnect(leader, other1)
@@ -143,7 +142,7 @@ func TestKV_Partition(t *testing.T) {
 	c.net.Disconnect(other1, leader)
 	c.net.Disconnect(other2, leader)
 
-	// 3. Submit to minority (leader), should fail or timeout
+	// Submit to minority (leader), should fail or timeout
 	req2 := api.PutArgs{Key: "k1", Value: "v2", Version: 1}
 	done := make(chan bool)
 	go func() {
@@ -162,7 +161,7 @@ func TestKV_Partition(t *testing.T) {
 		// Expected timeout
 	}
 
-	// 4. Other partition should elect new leader and progress
+	// Other partition should elect new leader and progress
 	newLeader := -1
 	for i := 0; i < 20; i++ {
 		if _, isLeader := c.rafts[other1].GetState(); isLeader {
@@ -181,7 +180,7 @@ func TestKV_Partition(t *testing.T) {
 	err3, _ := c.submit(newLeader, req3, 0)
 	assert.Equal(t, api.OK, err3, "Put in majority failed")
 
-	// 5. Heal partition
+	// Heal partition
 	c.net.Connect(leader, other1)
 	c.net.Connect(leader, other2)
 	c.net.Connect(other1, leader)
@@ -189,7 +188,7 @@ func TestKV_Partition(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	// 6. Verify progress continues
+	// Verify progress continues
 	req4 := api.PutArgs{Key: "k1", Value: "v4", Version: 2}
 	err4, _ := c.submit(newLeader, req4, 0)
 	assert.Equal(t, api.OK, err4, "Put after heal failed")
@@ -200,10 +199,8 @@ func TestKV_UnreliableNetwork(t *testing.T) {
 	defer c.opLog.Check(t)
 	c.net.SetReliability(false)
 
-	// Submit some requests
 	for i := 0; i < 20; i++ {
 		req := api.PutArgs{Key: "k", Value: string(rune('a' + i)), Version: api.TVersion(i)}
-		// We might need to retry since network is unreliable
 		success := false
 		for try := 0; try < 10; try++ {
 			leader := c.findLeader()
@@ -221,40 +218,36 @@ func TestKV_UnreliableNetwork(t *testing.T) {
 }
 
 func TestKV_SnapshotRPC(t *testing.T) {
-	// Small maxRaftState to trigger snapshots
 	c := makeKVCluster(3, 1000)
 	defer c.opLog.Check(t)
-	
+
 	leader := -1
 	for i := 0; i < 10; i++ {
 		leader = c.findLeader()
-		if leader != -1 { break }
+		if leader != -1 {
+			break
+		}
 		time.Sleep(200 * time.Millisecond)
 	}
 
-	// 1. Partition one follower
 	follower := (leader + 1) % 3
 	c.net.Disconnect(follower, leader)
 	c.net.Disconnect(follower, (leader+2)%3)
 	c.net.Disconnect(leader, follower)
 	c.net.Disconnect((leader+2)%3, follower)
 
-	// 2. Send many requests to majority to trigger snapshots
 	for i := 0; i < 100; i++ {
 		req := api.PutArgs{Key: "k", Value: testutils.RandString(100), Version: api.TVersion(i)}
 		c.submit(leader, req, 0)
 	}
 
-	// 3. Reconnect follower
 	c.net.Connect(follower, leader)
 	c.net.Connect(follower, (leader+2)%3)
 	c.net.Connect(leader, follower)
 	c.net.Connect((leader+2)%3, follower)
 
-	// 4. Wait for follower to catch up via snapshot
 	time.Sleep(2 * time.Second)
-	
-	// 5. Verify follower has the state
+
 	applied := c.rsms[follower].LastApplied()
 	assert.GreaterOrEqual(t, applied, 100, "Follower did not catch up via snapshot")
 }
@@ -262,22 +255,21 @@ func TestKV_SnapshotRPC(t *testing.T) {
 func TestKV_CrashRecovery(t *testing.T) {
 	c := makeKVCluster(3, -1)
 	defer c.opLog.Check(t)
-	
-	// 1. Wait for initial leader
+
 	leader := -1
 	for i := 0; i < 10; i++ {
 		leader = c.findLeader()
-		if leader != -1 { break }
+		if leader != -1 {
+			break
+		}
 		time.Sleep(200 * time.Millisecond)
 	}
 	assert.NotEqual(t, -1, leader, "Initial leader not elected")
 
-	// 2. Submit some requests
 	for i := 0; i < 10; i++ {
 		req := api.PutArgs{Key: "k", Value: string(rune('0' + i)), Version: api.TVersion(i)}
 		err, _ := c.submit(leader, req, 0)
 		if err != api.OK {
-			// retry if leader changed
 			leader = c.findLeader()
 			if leader != -1 {
 				c.submit(leader, req, 0)
@@ -285,32 +277,25 @@ func TestKV_CrashRecovery(t *testing.T) {
 		}
 	}
 
-	// 2. Kill all nodes
 	for i := 0; i < 3; i++ {
 		c.shutdownNode(i)
 	}
-	
-	time.Sleep(500 * time.Millisecond)
 
-	// 3. Restart nodes
+	time.Sleep(500 * time.Millisecond)
 	for i := 0; i < 3; i++ {
 		c.startNode(i, -1)
 	}
-
-	// 4. Wait for election
 	time.Sleep(1 * time.Second)
-
-	// 5. Verify data is still there
 	leader = -1
 	for i := 0; i < 10; i++ {
 		leader = c.findLeader()
-		if leader != -1 { break }
+		if leader != -1 {
+			break
+		}
 		time.Sleep(200 * time.Millisecond)
 	}
-	
-	assert.NotEqual(t, -1, leader, "No leader after restart")
 
-	// Submit one more to check stability
+	assert.NotEqual(t, -1, leader, "No leader after restart")
 	req := api.PutArgs{Key: "k", Value: "final", Version: api.TVersion(10)}
 	err, _ := c.submit(leader, req, 0)
 	assert.Equal(t, api.OK, err, "Failed to submit request after recovery")

@@ -11,7 +11,6 @@ import (
 
 	"net/http"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"kvraft/config"
 	"kvraft/internal/logger"
 	"kvraft/internal/metrics"
@@ -20,9 +19,10 @@ import (
 	kvpb "kvraft/pb"
 	"kvraft/persist"
 	"kvraft/raftransport"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
-// Node runs one replicated KV replica (Raft + RSM + gRPC).
 type Node struct {
 	me          int
 	lis         net.Listener
@@ -47,7 +47,6 @@ func dialPeer(addr string, baseDelay, maxDelay, minConnectTimeout time.Duration)
 	)
 }
 
-// StartNode listens on the address of the node with the given config id and joins the cluster.
 func StartNode(cfg *config.Config, nodeID int, dataDir string, maxRaftState int, isProd bool, isDebug bool, logPath string) (*Node, error) {
 	me := -1
 	for i, n := range cfg.Nodes {

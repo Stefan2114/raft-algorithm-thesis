@@ -40,10 +40,9 @@ var (
 	}, []string{"node_id"})
 )
 
-// InitMetrics sets initial values for the metrics so they appear in Prometheus immediately.
 func InitMetrics(nodeID int) {
 	idStr := strconv.Itoa(nodeID)
-	RaftState.WithLabelValues(idStr).Set(0) // Default to Follower
+	RaftState.WithLabelValues(idStr).Set(0)
 	CurrentTerm.WithLabelValues(idStr).Set(0)
 	CommitIndex.WithLabelValues(idStr).Set(0)
 	LastApplied.WithLabelValues(idStr).Set(0)

@@ -1,7 +1,6 @@
 package raft
 
 import (
-	"github.com/stretchr/testify/assert"
 	"kvraft/internal/logger"
 	"kvraft/raftapi"
 	"kvraft/testutils"
@@ -9,6 +8,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func makeCluster(n int) (*testutils.Network, []*Raft, []raftapi.Persister) {
@@ -16,7 +17,6 @@ func makeCluster(n int) (*testutils.Network, []*Raft, []raftapi.Persister) {
 	rafts := make([]*Raft, n)
 	persisters := make([]raftapi.Persister, n)
 
-	// Need to initialize peers arrays first
 	for i := 0; i < n; i++ {
 		persisters[i] = testutils.NewMockPersister()
 		rafts[i] = startRaft(i, n, net, persisters[i])
@@ -72,8 +72,6 @@ func checkOneLeader(t *testing.T, rafts []*Raft) int {
 	return -1
 }
 
-// waitApplied waits for a command to be applied by at least expectedCount nodes.
-// It returns the number of nodes that applied the command.
 func waitApplied(t *testing.T, index int, expectedCount int, rafts []*Raft, timeout time.Duration) int {
 	start := time.Now()
 	for time.Since(start) < timeout {
@@ -117,12 +115,10 @@ func TestRaft_ReElection(t *testing.T) {
 
 	leader1 := checkOneLeader(t, rafts)
 
-	// Disconnect the leader
 	for i := 0; i < 3; i++ {
 		net.Disconnect(leader1, i)
 	}
 
-	// Wait for a different leader to be elected
 	leader2 := -1
 	for iters := 0; iters < 20; iters++ {
 		time.Sleep(200 * time.Millisecond)
@@ -157,11 +153,9 @@ func TestRaft_BasicAppend(t *testing.T) {
 	index, _, isLeader := rafts[leader].Start(cmd)
 	assert.True(t, isLeader, "Start failed, node %d is not leader", leader)
 
-	// Wait for commit/apply on all nodes
 	applied := waitApplied(t, index, 3, rafts, 2*time.Second)
 	assert.Equal(t, 3, applied, "Only %d nodes applied command at index %d, expected 3", applied, index)
 
-	// Check applyCh of all nodes (drain them to verify content)
 	for i, rf := range rafts {
 		select {
 		case msg := <-rf.applyCh:
@@ -185,7 +179,6 @@ func TestRaft_Persist(t *testing.T) {
 	rafts[leader].Start("cmd1")
 	time.Sleep(500 * time.Millisecond)
 
-	// Restart all
 	for i := 0; i < 3; i++ {
 		rafts[i].Kill()
 		rafts[i] = startRaft(i, 3, net, persisters[i])
@@ -196,7 +189,6 @@ func TestRaft_Persist(t *testing.T) {
 	rafts[newLeader].Start("cmd2")
 	time.Sleep(500 * time.Millisecond)
 
-	// Check if cmd1 is still there
 	for i := 0; i < 3; i++ {
 		select {
 		case msg := <-rafts[i].applyCh:
@@ -217,7 +209,6 @@ func TestRaft_Backup(t *testing.T) {
 
 	leader1 := checkOneLeader(t, rafts)
 
-	// Partition: [leader1, other1] and [rest]
 	other1 := (leader1 + 1) % 5
 	for i := 0; i < 5; i++ {
 		if i != leader1 && i != other1 {
@@ -226,13 +217,11 @@ func TestRaft_Backup(t *testing.T) {
 		}
 	}
 
-	// Submit commands to minority, won't commit
 	for i := 0; i < 50; i++ {
 		rafts[leader1].Start(i)
 	}
 	time.Sleep(200 * time.Millisecond)
 
-	// Disconnect everyone, then connect the other 3
 	for i := 0; i < 5; i++ {
 		for j := 0; j < 5; j++ {
 			net.Disconnect(i, j)
@@ -251,13 +240,11 @@ func TestRaft_Backup(t *testing.T) {
 	}
 
 	leader2 := checkOneLeader(t, rafts)
-	// Lots of successful commands to new group
 	for i := 0; i < 50; i++ {
 		rafts[leader2].Start(i + 100)
 	}
 	time.Sleep(500 * time.Millisecond)
 
-	// Now connect everyone
 	for i := 0; i < 5; i++ {
 		for j := 0; j < 5; j++ {
 			net.Connect(i, j)
@@ -265,13 +252,10 @@ func TestRaft_Backup(t *testing.T) {
 	}
 
 	leader3 := checkOneLeader(t, rafts)
-	// New commands should commit
 	index999, _, _ := rafts[leader3].Start(999)
 	applied := waitApplied(t, index999, 5, rafts, 2*time.Second)
 	assert.Equal(t, 5, applied, "Only %d nodes applied final command, expected 5", applied)
 
-	// Check that leader1's old commands (0-49) are NOT present in any node's log
-	// The new log should contain 100-149 and then 999
 	for _, rf := range rafts {
 		rf.mu.RLock()
 		for _, entry := range rf.logs {
@@ -295,7 +279,6 @@ func TestRaft_ManyElections(t *testing.T) {
 
 	iters := 10
 	for ii := 1; ii < iters; ii++ {
-		// Disconnect three random nodes
 		i1 := rand.Int() % n
 		i2 := rand.Int() % n
 		i3 := rand.Int() % n
@@ -309,8 +292,6 @@ func TestRaft_ManyElections(t *testing.T) {
 			net.Disconnect(j, i3)
 		}
 
-		// Either the current leader should still be alive,
-		// or the remaining four should elect a new one.
 		checkOneLeader(t, rafts)
 
 		for j := 0; j < n; j++ {
@@ -338,7 +319,7 @@ func TestRaft_ConcurrentStarts(t *testing.T) {
 	iters := 10
 	var wg sync.WaitGroup
 	indices := make(chan int, iters)
-	
+
 	for i := 0; i < iters; i++ {
 		wg.Add(1)
 		go func(cmd int) {
@@ -368,14 +349,12 @@ func TestRaft_RPCBytes(t *testing.T) {
 	}()
 
 	leader := checkOneLeader(t, rafts)
-	
-	// Initial command to settle
+
 	rafts[leader].Start("init")
 	time.Sleep(200 * time.Millisecond)
-	
+
 	bytes0 := 0
 	for i := 0; i < 3; i++ {
-		// Mock network doesn't track bytes, but we can track RPC counts as a proxy
 		bytes0 += net.GetRPCCount(i)
 	}
 
@@ -383,14 +362,14 @@ func TestRaft_RPCBytes(t *testing.T) {
 	for i := 0; i < iters; i++ {
 		rafts[leader].Start(testutils.RandString(1000))
 	}
-	
+
 	time.Sleep(500 * time.Millisecond)
-	
+
 	bytes1 := 0
 	for i := 0; i < 3; i++ {
 		bytes1 += net.GetRPCCount(i)
 	}
-	
+
 	got := bytes1 - bytes0
 	expectedMax := (iters + 5) * 3
 	assert.LessOrEqual(t, got, expectedMax, "Too many RPCs; got %v, expected max %v", got, expectedMax)
@@ -406,15 +385,13 @@ func TestRaft_CountRPC(t *testing.T) {
 
 	checkOneLeader(t, rafts)
 	net.ResetRPCCounts()
-	
-	// Idle for 1 second
+
 	time.Sleep(1 * time.Second)
-	
+
 	total := 0
 	for i := 0; i < 3; i++ {
 		total += net.GetRPCCount(i)
 	}
-	
-	// So ~20 total RPCs. If it's way more, heartbeats are too frequent.
+
 	assert.LessOrEqual(t, total, 50, "Too many RPCs in idle; got %v, expected < 50", total)
 }

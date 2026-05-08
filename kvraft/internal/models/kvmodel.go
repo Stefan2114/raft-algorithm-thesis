@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/anishathalye/porcupine"
 	"kvraft/api"
+
+	"github.com/anishathalye/porcupine"
 )
 
 type KvInput struct {
@@ -56,23 +57,18 @@ var KvModel = porcupine.Model{
 
 		switch inp.Op {
 		case 0: // get
-			// Get should return the current value if successful.
-			// Any non-OK error (like ErrWrongLeader) is a no-op.
 			if out.Err == string(api.OK) {
 				return out.Value == st.Value, st
 			}
 			return true, st
 		case 1: // put
 			if out.Err == string(api.OK) {
-				// OK implies the version matched and it succeeded
 				if st.Version == inp.Version {
 					return true, KvState{Value: inp.Value, Version: st.Version + 1}
 				}
-				return false, st // OK but version mismatch is impossible in Raft
+				return false, st
 			}
-			
-			// ErrMaybe is special: if version matched, it might have succeeded.
-			// If it didn't match, it definitely failed.
+
 			if out.Err == string(api.ErrMaybe) {
 				if st.Version == inp.Version {
 					return true, KvState{Value: inp.Value, Version: st.Version + 1}
@@ -80,7 +76,6 @@ var KvModel = porcupine.Model{
 				return true, st
 			}
 
-			// Any other error (ErrWrongLeader, ErrVersion) is a no-op.
 			return true, st
 		default:
 			return false, st

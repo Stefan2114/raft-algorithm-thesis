@@ -202,7 +202,7 @@ providers:
     options:
       path: /etc/grafana/provisioning/dashboards
 """
-    # Note: We point to /etc/grafana/provisioning/dashboards inside the container
+    # TODO: We point to /etc/grafana/provisioning/dashboards inside the container
     # and we will mount our local config/grafana/dashboards to it if we want persistent JSONs,
     # but for now, we'll just allow provisioning from the folder we mounted.
     

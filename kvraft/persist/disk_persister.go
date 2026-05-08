@@ -8,8 +8,7 @@ import (
 
 type FilePersister struct {
 	mu  sync.Mutex
-	dir string // e.g. "/var/lib/kvraft/node-0"
-	// Each node gets its own directory.
+	dir string // Each node gets its own directory.
 }
 
 func MakeFilePersister(dir string) (*FilePersister, error) {

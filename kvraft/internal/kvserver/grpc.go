@@ -25,7 +25,6 @@ func errToStatus(e api.Err) kvpb.Status {
 	}
 }
 
-// KVService serves client Get/Put over gRPC by submitting through the RSM.
 type KVService struct {
 	kvpb.UnimplementedKVServer
 	RSM *rsm.RSM
