@@ -180,6 +180,35 @@ Once your data sources are connected, you can create a dashboard and query the c
 
 ---
 
+## Chaos Engineering Demo
+
+To demonstrate the fault tolerance of the Raft cluster in real-time, you can use the provided `chaos_monkey.py` script. This script acts as an automated chaos engineer, randomly injecting faults into the running cluster while ensuring a majority of nodes remain active so the cluster can continue to serve requests.
+
+### How it Works
+The script randomly selects 1 or 2 nodes (to preserve the majority in a 5-node cluster) every 15-30 seconds and performs one of the following actions:
+- **Stop**: Simulates a complete node crash. The node process dies.
+- **Pause**: Simulates a network partition, severe CPU starvation, or a long GC pause. The node process remains alive but cannot communicate with peers or process timers.
+
+After keeping the nodes offline/paused for 10-20 seconds, it brings them back online (`start` or `unpause`), simulating recovery.
+
+### Running the Demo
+1. Start your cluster and open your Grafana dashboard.
+2. In a new terminal, run the chaos script (it dynamically reads `../cluster.json` to calculate the safe maximum number of failures):
+```bash
+# Basic usage
+./chaos_monkey.py --config ../cluster.json
+
+# Advanced usage (customize downtime and event intervals in seconds)
+./chaos_monkey.py --config ../cluster.json --min-downtime 5 --max-downtime 15 --min-interval 10 --max-interval 20
+```
+3. Watch the Grafana dashboard. You should observe:
+   - Leader elections triggering when the current leader is paused or stopped.
+   - Nodes transitioning to the `Candidate` state.
+   - The cluster continuing to accept client traffic successfully despite the injected failures.
+4. Stop the chaos monkey cleanly by pressing `Ctrl+C`. It will automatically unpause and restart any affected nodes before exiting.
+
+---
+
 ## Design Patterns
 
 - Creational: Static Factory Pattern
