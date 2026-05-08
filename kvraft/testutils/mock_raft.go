@@ -65,7 +65,6 @@ func (m *MockRaft) Start(command interface{}) (int, int, bool) {
 	term := m.currentTerm
 	m.nextIndex++
 
-	// Queue the message for background delivery
 	m.msgQueue <- raftapi.ApplyMsg{
 		CommandValid: true,
 		Command:      command,

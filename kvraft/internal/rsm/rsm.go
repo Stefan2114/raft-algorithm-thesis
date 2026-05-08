@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var useRaftStateMachine bool // to plug in another raft besided raft1
+var useRaftStateMachine bool // to plug in another instance besided raft
 
 type Op struct {
 	Me  int
@@ -35,12 +35,6 @@ type pendingEntry struct {
 	ch   chan result
 }
 
-// A server (i.e., ../transport.go) that wants to replicate itself calls
-// MakeRSM and must implement the StateMachine interface.  This
-// interface allows the rsm package to interact with the server for
-// server-specific operations: the server must implement DoOp to
-// execute an operation (e.g., a Get or Put request), and
-// Snapshot/Restore to snapshot and restore the server's state.
 type StateMachine interface {
 	DoOp(any) any
 	Snapshot() []byte
@@ -48,40 +42,25 @@ type StateMachine interface {
 }
 
 type RSM struct {
-	mu           sync.Mutex
-	me           int
-	rf           raftapi.Raft
-	applyCh      chan raftapi.ApplyMsg
-	maxRaftState int // snapshot if log grows this big
-	sm           StateMachine
-	pending      map[int]*pendingEntry
-	lastApplied  int
-	logger       *zap.Logger
+	mu            sync.Mutex
+	me            int
+	rf            raftapi.Raft
+	applyCh       chan raftapi.ApplyMsg
+	maxRaftState  int
+	sm            StateMachine
+	pending       map[int]*pendingEntry
+	lastApplied   int
+	logger        *zap.Logger
 	submitTimeout time.Duration
 }
 
-// servers[] contains the ports of the set of
-// servers that will cooperate via Raft to
-// form the fault-tolerant key/value service.
-//
-// me is the index of the current server in servers[].
-//
-// the k/v server should store snapshots through the underlying Raft
-// implementation, which should call persister.SaveStateAndSnapshot() to
-// atomically save the Raft state along with the snapshot.
-// The RSM should snapshot when Raft's saved state exceeds maxRaftState bytes,
-// in order to allow Raft to garbage-collect its log. if maxRaftState is -1,
-// you don't need to snapshot.
-//
-// MakeRSM() must return quickly, so it should start goroutines for
-// any long-running work.
 func MakeRSM(servers []raft.Transport, me int, persister raftapi.Persister, maxRaftState int, sm StateMachine, logger *zap.Logger,
 	electionMin, electionRand, hb, submitTimeout time.Duration) *RSM {
 	rsm := &RSM{
-		me:           me,
-		maxRaftState: maxRaftState,
-		applyCh:      make(chan raftapi.ApplyMsg),
-		sm:           sm,
+		me:            me,
+		maxRaftState:  maxRaftState,
+		applyCh:       make(chan raftapi.ApplyMsg),
+		sm:            sm,
 		pending:       make(map[int]*pendingEntry),
 		logger:        logger.With(zap.Int("node", me), zap.String("component", "rsm")),
 		submitTimeout: submitTimeout,
@@ -207,7 +186,6 @@ func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 	rsm.lastApplied = msg.CommandIndex
 	rsm.mu.Unlock()
 
-	// Execute operation
 	resultVal := rsm.sm.DoOp(op.Req)
 
 	rsm.mu.Lock()
@@ -222,7 +200,6 @@ func (rsm *RSM) notifyPending(index int, id int64, val any) {
 
 	if exists {
 		rsm.logger.Debug("reader: notifying pending", zap.Int("index", index), zap.Int64("id", id), zap.Bool("matches", entry.id == id))
-		// Only succeed if we are still leader and the ID matches [cite: 135-136]
 		if isLeader && entry.id == id {
 			entry.ch <- result{id: id, val: val}
 		} else {
@@ -230,13 +207,12 @@ func (rsm *RSM) notifyPending(index int, id int64, val any) {
 		}
 		delete(rsm.pending, index)
 	}
-	rsm.notifyOutdated(index) // Clean up any other entries that can't possibly succeed now
+	rsm.notifyOutdated(index)
 }
 
 func (rsm *RSM) notifyOutdated(index int) {
 	currentTerm, isLeader := rsm.rf.GetState()
 	for idx, entry := range rsm.pending {
-		// if idx <= index || (!isLeader && entry.term < currentTerm) {
 		if idx <= index || !isLeader || entry.term != currentTerm {
 			if !isLeader && entry.term == currentTerm {
 				panic("Got here ups2")
@@ -257,7 +233,6 @@ func (rsm *RSM) checkSnapshot(index int) {
 
 func (rsm *RSM) cleanup() {
 	rsm.logger.Info("reader: applyCh closed, waking all pending")
-	// applyCh closed: wake up all waiting Submit() calls
 	rsm.mu.Lock()
 	defer rsm.mu.Unlock()
 	for _, entry := range rsm.pending {

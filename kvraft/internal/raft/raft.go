@@ -54,19 +54,19 @@ func Make(peers []Transport, me int,
 	electionMin, electionRand, hb time.Duration) raftapi.Raft {
 
 	rf := &Raft{
-		peers:          peers,
-		persister:      persister,
-		me:             me,
-		dead:           0,
-		applyCh:        applyCh,
-		replicatorCond: make([]*sync.Cond, len(peers)),
-		state:          StateFollower,
-		currentTerm:    0,
-		votedFor:       -1,
-		currentLeader:  -1,
-		logs:           make([]Entry, 1),
-		nextIndex:      make([]int, len(peers)),
-		matchIndex:     make([]int, len(peers)),
+		peers:               peers,
+		persister:           persister,
+		me:                  me,
+		dead:                0,
+		applyCh:             applyCh,
+		replicatorCond:      make([]*sync.Cond, len(peers)),
+		state:               StateFollower,
+		currentTerm:         0,
+		votedFor:            -1,
+		currentLeader:       -1,
+		logs:                make([]Entry, 1),
+		nextIndex:           make([]int, len(peers)),
+		matchIndex:          make([]int, len(peers)),
 		electionTimeoutMin:  electionMin,
 		electionTimeoutRand: electionRand,
 		heartbeatTimeout:    hb,
@@ -103,14 +103,8 @@ func (rf *Raft) GetLeader() int {
 	return rf.currentLeader
 }
 
-// the service using Raft (e.g. a k/v server) wants to start
-// agreement on the next command to be appended to Raft's log. if this
-// server isn't the leader, returns false. otherwise start the
-// agreement and return immediately. there is no guarantee that this
-// command will ever be committed to the Raft log, since the leader
-// may fail or lose an election. even if the Raft instance has been killed,
+// even if the Raft instance has been killed,
 // this function should return gracefully.
-//
 // the first return value is the index that the command will appear at
 // if it's ever committed. the second return value is the current
 // term. the third return value is true if this server believes it is
@@ -157,7 +151,6 @@ func (rf *Raft) encodeState() []byte {
 	return w.Bytes()
 }
 
-// save Raft's persistent state to stable storage
 func (rf *Raft) persist() {
 	if rf.killed() {
 		return
@@ -270,7 +263,6 @@ func (rf *Raft) applier() {
 			}
 		}
 
-		// If lastApplied is less than lastIncludedIndex, the state machine is behind the snapshot
 		if rf.lastApplied < rf.lastIncludedIndex {
 			snapshot, _ := rf.persister.ReadSnapshot()
 			msg := raftapi.ApplyMsg{
@@ -295,9 +287,6 @@ func (rf *Raft) applier() {
 		entries := make([]Entry, pLimit-pStart+1)
 		copy(entries, rf.logs[pStart:pLimit+1])
 
-		if limit <= rf.lastApplied {
-			panic("Shouldn't get here 2")
-		}
 		rf.lastApplied = limit
 		metrics.LastApplied.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.lastApplied))
 		rf.mu.Unlock()
@@ -735,9 +724,6 @@ func (rf *Raft) advancePeerIndices(peer int, args *AppendEntriesArgs) {
 func (rf *Raft) updateCommitIndex() {
 	for n := rf.getLen() - 1; n > rf.commitIndex; n-- {
 		if rf.getLog(n).Term == rf.currentTerm && rf.countNodesWithLogAt(n) > len(rf.peers)/2 {
-			if n <= rf.lastIncludedIndex {
-				panic("Shouldn't get here")
-			}
 			rf.commitIndex = n
 			metrics.CommitIndex.WithLabelValues(strconv.Itoa(rf.me)).Set(float64(rf.commitIndex))
 			rf.logger.Debug("commitIndex advanced", zap.Int("index", rf.commitIndex))

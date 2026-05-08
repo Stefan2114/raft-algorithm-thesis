@@ -1,6 +1,3 @@
-// Package api holds shared KV request/response types and errors used by the
-// state machine, tests, and gRPC. Keeping this small avoids rsm importing
-// a heavy server package.
 package api
 
 type Err string
@@ -11,7 +8,7 @@ const (
 	ErrVersion     Err = "ErrVersion"
 	ErrMaybe       Err = "ErrMaybe"
 	ErrWrongLeader Err = "ErrWrongLeader"
-	ErrWrongGroup  Err = "ErrWrongGroup"
+	//ErrWrongGroup  Err = "ErrWrongGroup"
 )
 
 type TVersion uint64

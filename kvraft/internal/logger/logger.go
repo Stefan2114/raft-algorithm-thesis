@@ -7,10 +7,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-// InitLogger initializes a high-performance Zap logger.
-// If isProduction is true, it uses JSON encoding.
-// Otherwise, it uses Console encoding (colorized).
-// Panics if initialization fails.
 func InitLogger(isProduction bool, isDebug bool, logPath string) *zap.Logger {
 	var config zap.Config
 
@@ -23,7 +19,6 @@ func InitLogger(isProduction bool, isDebug bool, logPath string) *zap.Logger {
 		config.Encoding = "console"
 	}
 
-	// Set level
 	level := zap.InfoLevel
 	if isDebug || os.Getenv("RAFT_DEBUG") == "true" {
 		level = zap.DebugLevel

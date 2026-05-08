@@ -21,7 +21,7 @@ func (m *MockStateMachine) DoOp(req interface{}) interface{} {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.applied = append(m.applied, req)
-	return req // Return the request itself as the result
+	return req
 }
 
 func (m *MockStateMachine) Snapshot() []byte {

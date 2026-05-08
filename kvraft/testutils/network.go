@@ -117,7 +117,6 @@ func (n *Network) Call(from int, to int, method string, args interface{}, reply 
 		return false
 	}
 
-	// Deep copy back to args type (create new instance)
 	argsType := reflect.TypeOf(args)
 	if argsType.Kind() == reflect.Ptr {
 		argsType = argsType.Elem()

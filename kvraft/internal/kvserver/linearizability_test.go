@@ -9,19 +9,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anishathalye/porcupine"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"kvraft/api"
 	"kvraft/config"
 	"kvraft/pkg/clerk"
+
+	"github.com/anishathalye/porcupine"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // Porcupine model for our KV store
 type kvInput struct {
-	op    string // "get", "put"
-	key   string
-	val   string
+	op      string // "get", "put"
+	key     string
+	val     string
 	version api.TVersion
 }
 
@@ -158,7 +159,7 @@ func TestLinearizability(t *testing.T) {
 		go func(clientId int) {
 			defer wg.Done()
 			for i := 0; i < nOpsPerClient; i++ {
-				key := "key" // Use a single key to maximize contention
+				key := "key"
 				opType := "put"
 				if rand.Intn(2) == 0 {
 					opType = "get"
@@ -175,12 +176,8 @@ func TestLinearizability(t *testing.T) {
 					end = time.Now()
 					out = kvOutput{val: val, version: ver, err: err}
 				} else {
-					// To do a Put, we first need to know the current version
-					// This is because our Put requires a version match.
-					// In a real scenario, the client would use the version from a previous Get.
 					_, ver, err := ck.Get(key)
 					if err != api.OK && err != api.ErrNoKey {
-						// Skip if get failed (e.g. wrong leader)
 						continue
 					}
 					if err == api.ErrNoKey {
@@ -205,7 +202,7 @@ func TestLinearizability(t *testing.T) {
 				}
 				opIdx++
 				historyMu.Unlock()
-				
+
 				time.Sleep(time.Duration(rand.Intn(50)) * time.Millisecond)
 			}
 		}(c)
@@ -213,12 +210,10 @@ func TestLinearizability(t *testing.T) {
 
 	wg.Wait()
 
-	// Trim history to actual number of ops (some might have been skipped if I added logic for that)
 	history = history[:opIdx]
 
 	res, info := porcupine.CheckOperationsVerbose(kvModel, history, 0)
 	if res == porcupine.Illegal {
-		// Generate visualization
 		visualPath := "linearizability-failure.html"
 		err := porcupine.VisualizePath(kvModel, info, visualPath)
 		assert.NoError(t, err, "Failed to generate visualization")
@@ -246,7 +241,6 @@ func TestSnapshotLaggingServer(t *testing.T) {
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
-	// Set a small maxRaftState to trigger snapshots quickly
 	maxRaftState := 1000
 
 	nodes := make([]*Node, nNodes)
@@ -270,27 +264,21 @@ func TestSnapshotLaggingServer(t *testing.T) {
 	ck, _ := kvclient.NewClerk([]string{cfg.Nodes[0].Addr, cfg.Nodes[1].Addr, cfg.Nodes[2].Addr})
 	defer ck.Close()
 
-	// 1. Initial op
 	ck.Put("k1", "v1", 0)
 
-	// 2. Stop node 2
 	nodes[2].Stop()
 	nodes[2] = nil
 
-	// 3. Perform many ops on 0 and 1 to trigger snapshots
 	for i := 0; i < 100; i++ {
 		ck.Put("k1", fmt.Sprintf("v%d", i), api.TVersion(i+1))
 	}
 
-	// 4. Restart node 2
 	node2, err := StartNode(cfg, 2, nodeDirs[2], maxRaftState, false, true, "")
 	require.NoError(t, err, "failed to restart node 2")
 	nodes[2] = node2
 
-	// 5. Wait for node 2 to catch up via InstallSnapshot
 	time.Sleep(2 * time.Second)
 
-	// 6. Check if node 2 has the state
 	val, ver, errCode := ck.Get("k1")
 	assert.Equal(t, api.OK, errCode)
 	assert.Equal(t, "v99", val)

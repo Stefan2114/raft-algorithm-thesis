@@ -9,15 +9,16 @@ import (
 	"testing"
 	"time"
 
-	"github.com/anishathalye/porcupine"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"kvraft/api"
 	"kvraft/config"
 	"kvraft/pkg/clerk"
+
+	"github.com/anishathalye/porcupine"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestLinearizabilityChaos(t *testing.T) {
+func TestLinearizabilityStress(t *testing.T) {
 	nNodes := 3
 	cfg := &config.Config{
 		Nodes: make([]config.Node, nNodes),
@@ -30,13 +31,13 @@ func TestLinearizabilityChaos(t *testing.T) {
 	}
 	cfg.PopulateDefaults()
 
-	tempDir, err := os.MkdirTemp("", "kvraft-chaos-*")
+	tempDir, err := os.MkdirTemp("", "kvraft-stress-*")
 	require.NoError(t, err)
 	defer os.RemoveAll(tempDir)
 
 	nodes := make([]*Node, nNodes)
 	nodeDirs := make([]string, nNodes)
-	mu := sync.Mutex{} // Protects nodes slice during restarts
+	mu := sync.Mutex{}
 
 	for i := 0; i < nNodes; i++ {
 		nodeDirs[i] = filepath.Join(tempDir, fmt.Sprintf("node-%d", i))
@@ -44,12 +45,12 @@ func TestLinearizabilityChaos(t *testing.T) {
 		require.NoError(t, err, "failed to start node %d", i)
 		nodes[i] = node
 	}
-	
-	stopChaos := make(chan struct{})
+
+	stopstress := make(chan struct{})
 	go func() {
 		for {
 			select {
-			case <-stopChaos:
+			case <-stopstress:
 				return
 			case <-time.After(time.Duration(500+rand.Intn(1000)) * time.Millisecond):
 				i := rand.Intn(nNodes)
@@ -58,9 +59,9 @@ func TestLinearizabilityChaos(t *testing.T) {
 					nodes[i].Stop()
 					nodes[i] = nil
 					mu.Unlock()
-					
+
 					time.Sleep(time.Duration(200+rand.Intn(500)) * time.Millisecond)
-					
+
 					mu.Lock()
 					node, err := StartNode(cfg, i, nodeDirs[i], -1, false, true, "")
 					if err == nil {
@@ -73,7 +74,7 @@ func TestLinearizabilityChaos(t *testing.T) {
 	}()
 
 	defer func() {
-		close(stopChaos)
+		close(stopstress)
 		mu.Lock()
 		for _, n := range nodes {
 			if n != nil {
@@ -83,7 +84,6 @@ func TestLinearizabilityChaos(t *testing.T) {
 		mu.Unlock()
 	}()
 
-	// Wait for leader election
 	time.Sleep(2 * time.Second)
 
 	ck, err := kvclient.NewClerk([]string{
@@ -107,7 +107,7 @@ func TestLinearizabilityChaos(t *testing.T) {
 		go func(clientId int) {
 			defer wg.Done()
 			for i := 0; i < nOpsPerClient; i++ {
-				key := "chaos-key"
+				key := "stress-key"
 				opType := "put"
 				if rand.Intn(2) == 0 {
 					opType = "get"
@@ -150,7 +150,7 @@ func TestLinearizabilityChaos(t *testing.T) {
 				}
 				opIdx++
 				historyMu.Unlock()
-				
+
 				time.Sleep(time.Duration(rand.Intn(100)) * time.Millisecond)
 			}
 		}(c)
@@ -161,11 +161,11 @@ func TestLinearizabilityChaos(t *testing.T) {
 
 	res, info := porcupine.CheckOperationsVerbose(kvModel, history, 0)
 	if res == porcupine.Illegal {
-		visualPath := "linearizability-chaos-failure.html"
+		visualPath := "linearizability-stress-failure.html"
 		err := porcupine.VisualizePath(kvModel, info, visualPath)
 		assert.NoError(t, err, "Failed to generate visualization")
-		assert.Fail(t, "Linearizability check failed under chaos! Failure visualization saved to %s", visualPath)
+		assert.Fail(t, "Linearizability check failed under stress! Failure visualization saved to %s", visualPath)
 	} else {
-		t.Log("Linearizability check passed under chaos")
+		t.Log("Linearizability check passed under stress")
 	}
 }
