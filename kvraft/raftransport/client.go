@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"kvraft/internal/raft"
 	kvpb "kvraft/pb"
+	"kvraft/raft"
 )
 
 const rpcTimeout = 2 * time.Second
@@ -15,7 +15,7 @@ type GRPCClient struct {
 	Raft kvpb.RaftClient
 }
 
-func (c *GRPCClient) Call(method string, args interface{}, reply interface{}) bool {
+func (c *GRPCClient) Call(method string, args any, reply any) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), rpcTimeout)
 	defer cancel()
 

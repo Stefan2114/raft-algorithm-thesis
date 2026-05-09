@@ -119,7 +119,7 @@ func RegisterRaftServer(s grpc.ServiceRegistrar, srv RaftServer) {
 	s.RegisterService(&Raft_ServiceDesc, srv)
 }
 
-func _Raft_RequestVote_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Raft_RequestVote_Handler(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 	in := new(RequestVoteArgs)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -131,13 +131,13 @@ func _Raft_RequestVote_Handler(srv interface{}, ctx context.Context, dec func(in
 		Server:     srv,
 		FullMethod: Raft_RequestVote_FullMethodName,
 	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return srv.(RaftServer).RequestVote(ctx, req.(*RequestVoteArgs))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Raft_AppendEntries_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Raft_AppendEntries_Handler(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 	in := new(AppendEntriesArgs)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -149,13 +149,13 @@ func _Raft_AppendEntries_Handler(srv interface{}, ctx context.Context, dec func(
 		Server:     srv,
 		FullMethod: Raft_AppendEntries_FullMethodName,
 	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return srv.(RaftServer).AppendEntries(ctx, req.(*AppendEntriesArgs))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Raft_InstallSnapshot_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _Raft_InstallSnapshot_Handler(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 	in := new(InstallSnapshotArgs)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -167,7 +167,7 @@ func _Raft_InstallSnapshot_Handler(srv interface{}, ctx context.Context, dec fun
 		Server:     srv,
 		FullMethod: Raft_InstallSnapshot_FullMethodName,
 	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return srv.(RaftServer).InstallSnapshot(ctx, req.(*InstallSnapshotArgs))
 	}
 	return interceptor(ctx, in, info, handler)

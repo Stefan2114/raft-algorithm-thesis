@@ -103,7 +103,7 @@ func RegisterKVServer(s grpc.ServiceRegistrar, srv KVServer) {
 	s.RegisterService(&KV_ServiceDesc, srv)
 }
 
-func _KV_Get_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _KV_Get_Handler(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 	in := new(GetRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -115,13 +115,13 @@ func _KV_Get_Handler(srv interface{}, ctx context.Context, dec func(interface{})
 		Server:     srv,
 		FullMethod: KV_Get_FullMethodName,
 	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return srv.(KVServer).Get(ctx, req.(*GetRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _KV_Put_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+func _KV_Put_Handler(srv any, ctx context.Context, dec func(any) error, interceptor grpc.UnaryServerInterceptor) (any, error) {
 	in := new(PutRequest)
 	if err := dec(in); err != nil {
 		return nil, err
@@ -133,7 +133,7 @@ func _KV_Put_Handler(srv interface{}, ctx context.Context, dec func(interface{})
 		Server:     srv,
 		FullMethod: KV_Put_FullMethodName,
 	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+	handler := func(ctx context.Context, req any) (any, error) {
 		return srv.(KVServer).Put(ctx, req.(*PutRequest))
 	}
 	return interceptor(ctx, in, info, handler)

@@ -3,8 +3,9 @@ package rsm
 import (
 	"kvraft/api"
 	"kvraft/internal/logger"
-	"kvraft/raftapi"
-	"kvraft/testutils"
+	"kvraft/internal/testutils"
+	"kvraft/raft"
+	"kvraft/sm"
 	"testing"
 	"time"
 
@@ -17,10 +18,10 @@ func TestRSM_SubmitSuccess(t *testing.T) {
 	defer func() { useRaftStateMachine = false }()
 
 	l := logger.InitLogger(false, true, "")
-	sm := testutils.NewMockStateMachine()
+	mock_sm := testutils.NewMockStateMachine()
 	persister := testutils.NewMockPersister()
 
-	rsm := MakeRSM(nil, 0, persister, -1, sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
+	rsm := MakeRSM(nil, 0, persister, -1, mock_sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
 
 	mockRaft := testutils.NewMockRaft(0, rsm.applyCh, persister)
 	rsm.rf = mockRaft
@@ -28,7 +29,7 @@ func TestRSM_SubmitSuccess(t *testing.T) {
 	req := "test_command"
 
 	errCh := make(chan api.Err)
-	valCh := make(chan interface{})
+	valCh := make(chan any)
 
 	go func() {
 		err, val := rsm.Submit(req)
@@ -45,7 +46,7 @@ func TestRSM_SubmitSuccess(t *testing.T) {
 		assert.Fail(t, "Submit timed out")
 	}
 
-	assert.Equal(t, 1, sm.GetAppliedCount(), "Expected 1 applied command")
+	assert.Equal(t, 1, mock_sm.GetAppliedCount(), "Expected 1 applied command")
 }
 
 func TestRSM_SubmitNotLeader(t *testing.T) {
@@ -53,10 +54,10 @@ func TestRSM_SubmitNotLeader(t *testing.T) {
 	defer func() { useRaftStateMachine = false }()
 
 	l := logger.InitLogger(false, true, "")
-	sm := testutils.NewMockStateMachine()
+	mock_sm := testutils.NewMockStateMachine()
 	persister := testutils.NewMockPersister()
 
-	rsm := MakeRSM(nil, 0, persister, -1, sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
+	rsm := MakeRSM(nil, 0, persister, -1, mock_sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
 	mockRaft := testutils.NewMockRaft(0, rsm.applyCh, persister)
 	mockRaft.SetLeader(false, 1) // Not leader, leader is 1
 	rsm.rf = mockRaft
@@ -71,10 +72,10 @@ func TestRSM_SnapshotTrigger(t *testing.T) {
 	defer func() { useRaftStateMachine = false }()
 
 	l := logger.InitLogger(false, true, "")
-	sm := testutils.NewMockStateMachine()
+	mock_sm := testutils.NewMockStateMachine()
 	persister := testutils.NewMockPersister()
 
-	rsm := MakeRSM(nil, 0, persister, 10, sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
+	rsm := MakeRSM(nil, 0, persister, 10, mock_sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
 	mockRaft := testutils.NewMockRaft(0, rsm.applyCh, persister)
 	rsm.rf = mockRaft
 
@@ -93,10 +94,10 @@ func TestRSM_RestoreFromSnapshot(t *testing.T) {
 	defer func() { useRaftStateMachine = false }()
 
 	l := logger.InitLogger(false, true, "")
-	sm := testutils.NewMockStateMachine()
+	mock_sm := testutils.NewMockStateMachine()
 	persister := testutils.NewMockPersister()
 
-	rsm1 := MakeRSM(nil, 0, persister, 10, sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
+	rsm1 := MakeRSM(nil, 0, persister, 10, mock_sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
 	mockRaft := testutils.NewMockRaft(0, rsm1.applyCh, persister)
 	rsm1.rf = mockRaft
 	persister.Save(make([]byte, 20), nil)
@@ -115,11 +116,11 @@ func TestRSM_LeaderChangeDuringSubmit(t *testing.T) {
 	defer func() { useRaftStateMachine = false }()
 
 	l := logger.InitLogger(false, true, "")
-	sm := testutils.NewMockStateMachine()
+	mock_sm := testutils.NewMockStateMachine()
 	persister := testutils.NewMockPersister()
 
-	rsm := MakeRSM(nil, 0, persister, -1, sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
-	dummyCh := make(chan raftapi.ApplyMsg, 10)
+	rsm := MakeRSM(nil, 0, persister, -1, mock_sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
+	dummyCh := make(chan raft.ApplyMsg, 10)
 	mockRaft := testutils.NewMockRaft(0, dummyCh, persister)
 	rsm.rf = mockRaft
 
@@ -134,9 +135,9 @@ func TestRSM_LeaderChangeDuringSubmit(t *testing.T) {
 	// Simulate leader change by applying an empty log or another term
 	mockRaft.SetLeader(false, 1)
 
-	rsm.applyCh <- raftapi.ApplyMsg{
+	rsm.applyCh <- raft.ApplyMsg{
 		CommandValid: true,
-		Command:      Op{Id: 999, Req: "different_command"},
+		Command:      sm.Op{Id: 999, Req: "different_command"},
 		CommandIndex: 1, // Same index
 	}
 
@@ -153,10 +154,10 @@ func TestRSM_SnapshotIsolation(t *testing.T) {
 	defer func() { useRaftStateMachine = false }()
 
 	l := logger.InitLogger(false, true, "")
-	sm := testutils.NewMockStateMachine()
+	mock_sm := testutils.NewMockStateMachine()
 	persister := testutils.NewMockPersister()
 
-	rsm := MakeRSM(nil, 0, persister, 10, sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
+	rsm := MakeRSM(nil, 0, persister, 10, mock_sm, l, 600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
 	mockRaft := testutils.NewMockRaft(0, rsm.applyCh, persister)
 	rsm.rf = mockRaft
 
@@ -179,5 +180,5 @@ func TestRSM_SnapshotIsolation(t *testing.T) {
 		}
 	}
 
-	assert.Equal(t, iters, sm.GetAppliedCount(), "Expected %d applied commands", iters)
+	assert.Equal(t, iters, mock_sm.GetAppliedCount(), "Expected %d applied commands", iters)
 }

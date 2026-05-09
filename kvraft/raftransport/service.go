@@ -3,14 +3,14 @@ package raftransport
 import (
 	"context"
 
-	"kvraft/internal/raft"
 	kvpb "kvraft/pb"
+	"kvraft/raft"
 )
 
 // RaftService wraps *raft.Raft RPC handlers for gRPC.
 type RaftService struct {
 	kvpb.UnimplementedRaftServer
-	RF *raft.Raft
+	RF raft.RaftRPC
 }
 
 func (s *RaftService) RequestVote(_ context.Context, req *kvpb.RequestVoteArgs) (*kvpb.RequestVoteReply, error) {
@@ -31,7 +31,7 @@ func (s *RaftService) RequestVote(_ context.Context, req *kvpb.RequestVoteArgs) 
 func (s *RaftService) AppendEntries(_ context.Context, req *kvpb.AppendEntriesArgs) (*kvpb.AppendEntriesReply, error) {
 	entries, err := entriesFromProto(req.Entries)
 	if err != nil {
-		term, _ := s.RF.GetState()
+		term, _ := s.RF.State()
 		return &kvpb.AppendEntriesReply{Term: int32(term), Success: false}, nil
 	}
 	args := raft.AppendEntriesArgs{

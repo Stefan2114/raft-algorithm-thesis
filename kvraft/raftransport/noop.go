@@ -6,4 +6,4 @@ package raftransport
 // failed") is the safest fallback in case it ever is called by mistake.
 type Noop struct{}
 
-func (Noop) Call(string, interface{}, interface{}) bool { return false }
+func (Noop) Call(string, any, any) bool { return false }

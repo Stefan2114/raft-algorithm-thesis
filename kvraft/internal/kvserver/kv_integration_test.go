@@ -4,12 +4,10 @@ import (
 	"encoding/gob"
 	"kvraft/api"
 	"kvraft/internal/logger"
-	"kvraft/internal/models"
-	"kvraft/internal/raft"
 	"kvraft/internal/rsm"
-	"kvraft/raftapi"
+	"kvraft/internal/testutils"
+	"kvraft/raft"
 	"kvraft/raftransport"
-	"kvraft/testutils"
 	"testing"
 	"time"
 
@@ -19,8 +17,8 @@ import (
 type kvCluster struct {
 	net        *testutils.Network
 	rsms       []*rsm.RSM
-	rafts      []*raft.Raft
-	persisters []raftapi.Persister
+	rafts      []raft.Raft
+	persisters []raft.Persister
 	stores     []*Store
 	n          int
 	opLog      *testutils.OpLog
@@ -31,9 +29,9 @@ func makeKVCluster(n int, maxRaftState int) *kvCluster {
 	gob.Register("")
 	net := testutils.NewNetwork()
 	rsms := make([]*rsm.RSM, n)
-	rafts := make([]*raft.Raft, n)
+	rafts := make([]raft.Raft, n)
 	stores := make([]*Store, n)
-	persisters := make([]raftapi.Persister, n)
+	persisters := make([]raft.Persister, n)
 
 	for i := 0; i < n; i++ {
 		persisters[i] = testutils.NewMockPersister()
@@ -65,7 +63,7 @@ func (c *kvCluster) startNode(i int, maxRaftState int) {
 	rsmInst := rsm.MakeRSM(transports, i, c.persisters[i], maxRaftState, c.stores[i], l,
 		600*time.Millisecond, 400*time.Millisecond, 100*time.Millisecond, 10*time.Second)
 	c.rsms[i] = rsmInst
-	c.rafts[i] = rsmInst.Raft().(*raft.Raft)
+	c.rafts[i] = rsmInst.Raft()
 	c.net.AddServer(i, c.rsms[i].Raft())
 }
 
@@ -75,7 +73,7 @@ func (c *kvCluster) shutdownNode(i int) {
 
 func (c *kvCluster) findLeader() int {
 	for i, rf := range c.rafts {
-		if _, isLeader := rf.GetState(); isLeader {
+		if _, isLeader := rf.State(); isLeader {
 			return i
 		}
 	}
@@ -88,8 +86,8 @@ func (c *kvCluster) submit(id int, req api.PutArgs, clientId int) (api.Err, api.
 	end := time.Now()
 
 	c.opLog.Append(
-		models.KvInput{Op: 1, Key: req.Key, Value: req.Value, Version: uint64(req.Version)},
-		models.KvOutput{Err: string(err)},
+		testutils.KvInput{Op: 1, Key: req.Key, Value: req.Value, Version: uint64(req.Version)},
+		testutils.KvOutput{Err: string(err)},
 		start, end, clientId,
 	)
 	return err, api.PutReply{Err: err}
@@ -108,8 +106,8 @@ func (c *kvCluster) get(id int, req api.GetArgs, clientId int) (api.Err, api.Get
 	}
 
 	c.opLog.Append(
-		models.KvInput{Op: 0, Key: req.Key},
-		models.KvOutput{Value: reply.Value, Err: string(err)},
+		testutils.KvInput{Op: 0, Key: req.Key},
+		testutils.KvOutput{Value: reply.Value, Err: string(err)},
 		start, end, clientId,
 	)
 	return err, reply
@@ -164,11 +162,11 @@ func TestKV_Partition(t *testing.T) {
 	// Other partition should elect new leader and progress
 	newLeader := -1
 	for i := 0; i < 20; i++ {
-		if _, isLeader := c.rafts[other1].GetState(); isLeader {
+		if _, isLeader := c.rafts[other1].State(); isLeader {
 			newLeader = other1
 			break
 		}
-		if _, isLeader := c.rafts[other2].GetState(); isLeader {
+		if _, isLeader := c.rafts[other2].State(); isLeader {
 			newLeader = other2
 			break
 		}

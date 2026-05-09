@@ -4,25 +4,20 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"kvraft/sm"
 	"sync"
 	"time"
 
 	"kvraft/api"
 	"kvraft/internal/metrics"
-	"kvraft/internal/raft"
-	"kvraft/raftapi"
+	raftimpl "kvraft/internal/raft"
+	"kvraft/raft"
 	"strconv"
 
 	"go.uber.org/zap"
 )
 
 var useRaftStateMachine bool // to plug in another instance besided raft
-
-type Op struct {
-	Me  int
-	Id  int64 // Unique ID to match Submit with the applied result
-	Req any
-}
 
 type result struct {
 	id  int64
@@ -35,41 +30,37 @@ type pendingEntry struct {
 	ch   chan result
 }
 
-type StateMachine interface {
-	DoOp(any) any
-	Snapshot() []byte
-	Restore([]byte)
-}
-
 type RSM struct {
 	mu            sync.Mutex
 	me            int
-	rf            raftapi.Raft
-	applyCh       chan raftapi.ApplyMsg
+	rf            raft.Raft
+	applyCh       chan raft.ApplyMsg
 	maxRaftState  int
-	sm            StateMachine
+	sm            sm.StateMachine
 	pending       map[int]*pendingEntry
 	lastApplied   int
 	logger        *zap.Logger
 	submitTimeout time.Duration
 }
 
-func MakeRSM(servers []raft.Transport, me int, persister raftapi.Persister, maxRaftState int, sm StateMachine, logger *zap.Logger,
+func MakeRSM(servers []raft.Transport, me int, persister raft.Persister, maxRaftState int, sm sm.StateMachine, logger *zap.Logger,
 	electionMin, electionRand, hb, submitTimeout time.Duration) *RSM {
 	rsm := &RSM{
 		me:            me,
 		maxRaftState:  maxRaftState,
-		applyCh:       make(chan raftapi.ApplyMsg),
+		applyCh:       make(chan raft.ApplyMsg),
 		sm:            sm,
 		pending:       make(map[int]*pendingEntry),
-		logger:        logger.With(zap.Int("node", me), zap.String("component", "rsm")),
+		logger:        logger.With(zap.Int("node", me), zap.String("component", "sm")),
 		submitTimeout: submitTimeout,
 	}
 	if !useRaftStateMachine {
-		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh, logger, electionMin, electionRand, hb)
+		rsm.rf = raftimpl.Make(servers, me, persister, rsm.applyCh, logger, electionMin, electionRand, hb)
 	}
 	if snapshot, _ := persister.ReadSnapshot(); len(snapshot) > 0 {
-		rsm.sm.Restore(snapshot)
+		if err := rsm.sm.Restore(snapshot); err != nil {
+			rsm.logger.Fatal("failed to restore snapshot", zap.Error(err))
+		}
 	}
 	rsm.logger.Info("RSM started", zap.Int("maxRaftState", maxRaftState))
 
@@ -77,7 +68,7 @@ func MakeRSM(servers []raft.Transport, me int, persister raftapi.Persister, maxR
 	return rsm
 }
 
-func (rsm *RSM) Raft() raftapi.Raft {
+func (rsm *RSM) Raft() raft.Raft {
 	return rsm.rf
 }
 
@@ -87,7 +78,7 @@ func (rsm *RSM) Raft() raftapi.Raft {
 func (rsm *RSM) Submit(req any) (api.Err, any) {
 
 	id := randValue()
-	op := Op{Me: rsm.me, Id: id, Req: req}
+	op := sm.Op{Me: rsm.me, Id: id, Req: req}
 	ch := make(chan result)
 	rsm.mu.Lock()
 
@@ -95,7 +86,7 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 
 	index, term, isLeader := rsm.rf.Start(op)
 	if !isLeader {
-		leader := rsm.rf.GetLeader()
+		leader := rsm.rf.Leader()
 		rsm.mu.Unlock()
 		return api.ErrWrongLeader, leader
 	}
@@ -114,11 +105,11 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 	case res, ok := <-ch:
 		if !ok {
 			rsm.logger.Debug("submit failed: channel closed", zap.Int64("id", id), zap.Int("index", index))
-			return api.ErrWrongLeader, rsm.rf.GetLeader()
+			return api.ErrWrongLeader, rsm.rf.Leader()
 		}
 		if res.id != id {
 			rsm.logger.Debug("submit failed: leader changed", zap.Int64("id", id), zap.Int("index", index), zap.Int64("actualId", res.id))
-			return api.ErrWrongLeader, rsm.rf.GetLeader()
+			return api.ErrWrongLeader, rsm.rf.Leader()
 		}
 		rsm.logger.Debug("submit success", zap.Int64("id", id), zap.Int("index", index))
 		return api.OK, res.val
@@ -127,7 +118,7 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 		pending := rsm.dumpPending()
 		rsm.mu.Unlock()
 		rsm.logger.Warn("submit timeout", zap.Int64("id", id), zap.Int("index", index), zap.String("pending", pending))
-		return api.ErrWrongLeader, rsm.rf.GetLeader()
+		return api.ErrWrongLeader, rsm.rf.Leader()
 	}
 }
 
@@ -152,23 +143,20 @@ func (rsm *RSM) reader() {
 	rsm.cleanup()
 }
 
-func (rsm *RSM) handleSnapshot(msg raftapi.ApplyMsg) {
+func (rsm *RSM) handleSnapshot(msg raft.ApplyMsg) {
 	rsm.logger.Debug("reader: snapshot", zap.Int("index", msg.SnapshotIndex))
 	rsm.mu.Lock()
 	defer rsm.mu.Unlock()
 
-	if msg.SnapshotIndex <= rsm.lastApplied {
-		panic("RSM got here ups")
-		return
+	if err := rsm.sm.Restore(msg.Snapshot); err != nil {
+		rsm.logger.Fatal("failed to restore snapshot", zap.Error(err))
 	}
-
-	rsm.sm.Restore(msg.Snapshot)
 	rsm.lastApplied = msg.SnapshotIndex
 	rsm.notifyOutdated(msg.SnapshotIndex)
 }
 
-func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
-	op, ok := msg.Command.(Op)
+func (rsm *RSM) handleCommand(msg raft.ApplyMsg) {
+	op, ok := msg.Command.(sm.Op)
 
 	if !ok {
 		rsm.logger.Error("reader: command not Op type", zap.String("type", fmt.Sprintf("%T", msg.Command)))
@@ -195,7 +183,7 @@ func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 }
 
 func (rsm *RSM) notifyPending(index int, id int64, val any) {
-	_, isLeader := rsm.rf.GetState()
+	_, isLeader := rsm.rf.State()
 	entry, exists := rsm.pending[index]
 
 	if exists {
@@ -211,12 +199,9 @@ func (rsm *RSM) notifyPending(index int, id int64, val any) {
 }
 
 func (rsm *RSM) notifyOutdated(index int) {
-	currentTerm, isLeader := rsm.rf.GetState()
+	currentTerm, isLeader := rsm.rf.State()
 	for idx, entry := range rsm.pending {
 		if idx <= index || !isLeader || entry.term != currentTerm {
-			if !isLeader && entry.term == currentTerm {
-				panic("Got here ups2")
-			}
 			entry.ch <- result{id: -1}
 			delete(rsm.pending, idx)
 		}
@@ -226,7 +211,10 @@ func (rsm *RSM) notifyOutdated(index int) {
 func (rsm *RSM) checkSnapshot(index int) {
 	if rsm.maxRaftState != -1 && rsm.rf.PersistBytes() >= rsm.maxRaftState {
 		rsm.logger.Info("taking snapshot", zap.Int("index", index), zap.Int("persistBytes", rsm.rf.PersistBytes()), zap.Int("threshold", rsm.maxRaftState))
-		snapshot := rsm.sm.Snapshot()
+		snapshot, err := rsm.sm.Snapshot()
+		if err != nil {
+			rsm.logger.Fatal("failed to take snapshot", zap.Error(err))
+		}
 		rsm.rf.Snapshot(index, snapshot)
 	}
 }

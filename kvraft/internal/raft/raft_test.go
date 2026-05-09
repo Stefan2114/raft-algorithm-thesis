@@ -2,8 +2,8 @@ package raft
 
 import (
 	"kvraft/internal/logger"
-	"kvraft/raftapi"
-	"kvraft/testutils"
+	"kvraft/internal/testutils"
+	"kvraft/raft"
 	"math/rand"
 	"sync"
 	"testing"
@@ -12,10 +12,10 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func makeCluster(n int) (*testutils.Network, []*Raft, []raftapi.Persister) {
+func makeCluster(n int) (*testutils.Network, []*Raft, []raft.Persister) {
 	net := testutils.NewNetwork()
 	rafts := make([]*Raft, n)
-	persisters := make([]raftapi.Persister, n)
+	persisters := make([]raft.Persister, n)
 
 	for i := 0; i < n; i++ {
 		persisters[i] = testutils.NewMockPersister()
@@ -26,14 +26,14 @@ func makeCluster(n int) (*testutils.Network, []*Raft, []raftapi.Persister) {
 	return net, rafts, persisters
 }
 
-func startRaft(me int, n int, net *testutils.Network, persister raftapi.Persister) *Raft {
+func startRaft(me int, n int, net *testutils.Network, persister raft.Persister) *Raft {
 	transportsInter := testutils.MakeMockTransports(net, me, n)
-	transports := make([]Transport, n)
+	transports := make([]raft.Transport, n)
 	for j, ti := range transportsInter {
-		transports[j] = ti.(Transport)
+		transports[j] = ti.(raft.Transport)
 	}
 
-	applyCh := make(chan raftapi.ApplyMsg, 1000)
+	applyCh := make(chan raft.ApplyMsg, 1000)
 	l := logger.InitLogger(false, true, "")
 
 	rfInter := Make(transports, me, persister, applyCh, l,
@@ -48,7 +48,7 @@ func checkOneLeader(t *testing.T, rafts []*Raft) int {
 
 		leaders := make(map[int][]int)
 		for i, rf := range rafts {
-			if term, isLeader := rf.GetState(); isLeader {
+			if term, isLeader := rf.State(); isLeader {
 				leaders[term] = append(leaders[term], i)
 			}
 		}
@@ -72,7 +72,7 @@ func checkOneLeader(t *testing.T, rafts []*Raft) int {
 	return -1
 }
 
-func waitApplied(t *testing.T, index int, expectedCount int, rafts []*Raft, timeout time.Duration) int {
+func waitApplied(index int, expectedCount int, rafts []*Raft, timeout time.Duration) int {
 	start := time.Now()
 	for time.Since(start) < timeout {
 		count := 0
@@ -153,7 +153,7 @@ func TestRaft_BasicAppend(t *testing.T) {
 	index, _, isLeader := rafts[leader].Start(cmd)
 	assert.True(t, isLeader, "Start failed, node %d is not leader", leader)
 
-	applied := waitApplied(t, index, 3, rafts, 2*time.Second)
+	applied := waitApplied(index, 3, rafts, 2*time.Second)
 	assert.Equal(t, 3, applied, "Only %d nodes applied command at index %d, expected 3", applied, index)
 
 	for i, rf := range rafts {
@@ -253,7 +253,7 @@ func TestRaft_Backup(t *testing.T) {
 
 	leader3 := checkOneLeader(t, rafts)
 	index999, _, _ := rafts[leader3].Start(999)
-	applied := waitApplied(t, index999, 5, rafts, 2*time.Second)
+	applied := waitApplied(index999, 5, rafts, 2*time.Second)
 	assert.Equal(t, 5, applied, "Only %d nodes applied final command, expected 5", applied)
 
 	for _, rf := range rafts {
@@ -335,7 +335,7 @@ func TestRaft_ConcurrentStarts(t *testing.T) {
 	close(indices)
 
 	for index := range indices {
-		applied := waitApplied(t, index, 3, rafts, 2*time.Second)
+		applied := waitApplied(index, 3, rafts, 2*time.Second)
 		assert.Equal(t, 3, applied, "Command at index %d not applied by all nodes", index)
 	}
 }

@@ -1,52 +1,57 @@
 package kvserver
 
 import (
-	"github.com/stretchr/testify/assert"
 	"kvraft/api"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
-func TestStore_GetPut(t *testing.T) {
+func TestStore_GetEmpty(t *testing.T) {
 	store := NewStore()
-
-	// Test Get on empty store
 	res := store.DoOp(api.GetArgs{Key: "foo"})
 	getRes := res.(api.GetReply)
-	assert.Equal(t, api.ErrNoKey, getRes.Err, "Expected ErrNoKey")
+	assert.Equal(t, api.ErrNoKey, getRes.Err)
+}
 
-	// Test Put new key
-	res = store.DoOp(api.PutArgs{Key: "foo", Value: "bar", Version: 0})
+func TestStore_PutNew(t *testing.T) {
+	store := NewStore()
+	res := store.DoOp(api.PutArgs{Key: "foo", Value: "bar", Version: 0})
 	putRes := res.(api.PutReply)
-	assert.Equal(t, api.OK, putRes.Err, "Expected OK")
+	assert.Equal(t, api.OK, putRes.Err)
 
-	// Test Get existing key
 	res = store.DoOp(api.GetArgs{Key: "foo"})
-	getRes = res.(api.GetReply)
+	getRes := res.(api.GetReply)
 	assert.Equal(t, api.OK, getRes.Err)
 	assert.Equal(t, "bar", getRes.Value)
 	assert.Equal(t, api.TVersion(1), getRes.Version)
+}
 
-	// Test Put existing key with correct version
-	res = store.DoOp(api.PutArgs{Key: "foo", Value: "baz", Version: 1})
-	putRes = res.(api.PutReply)
-	assert.Equal(t, api.OK, putRes.Err, "Expected OK")
+func TestStore_UpdateExisting(t *testing.T) {
+	store := NewStore()
+	store.DoOp(api.PutArgs{Key: "foo", Value: "bar", Version: 0})
 
-	// Verify updated value and version
+	res := store.DoOp(api.PutArgs{Key: "foo", Value: "baz", Version: 1})
+	putRes := res.(api.PutReply)
+	assert.Equal(t, api.OK, putRes.Err)
+
 	res = store.DoOp(api.GetArgs{Key: "foo"})
-	getRes = res.(api.GetReply)
-	assert.Equal(t, api.OK, getRes.Err)
+	getRes := res.(api.GetReply)
 	assert.Equal(t, "baz", getRes.Value)
 	assert.Equal(t, api.TVersion(2), getRes.Version)
+}
 
-	// Test Put existing key with incorrect version (too high)
-	res = store.DoOp(api.PutArgs{Key: "foo", Value: "qux", Version: 5})
-	putRes = res.(api.PutReply)
-	assert.Equal(t, api.ErrVersion, putRes.Err, "Expected ErrVersion")
+func TestStore_InvalidVersion(t *testing.T) {
+	store := NewStore()
+	store.DoOp(api.PutArgs{Key: "foo", Value: "bar", Version: 0})
 
-	// Test Put existing key with incorrect version (too low / old)
-	res = store.DoOp(api.PutArgs{Key: "foo", Value: "qux", Version: 1})
-	putRes = res.(api.PutReply)
-	assert.Equal(t, api.ErrVersion, putRes.Err, "Expected ErrVersion")
+	// Version too high
+	res := store.DoOp(api.PutArgs{Key: "foo", Value: "qux", Version: 5})
+	assert.Equal(t, api.ErrVersion, res.(api.PutReply).Err)
+
+	// Version too low
+	res = store.DoOp(api.PutArgs{Key: "foo", Value: "qux", Version: 0})
+	assert.Equal(t, api.ErrVersion, res.(api.PutReply).Err)
 }
 
 func TestStore_SnapshotRestore(t *testing.T) {
@@ -55,10 +60,12 @@ func TestStore_SnapshotRestore(t *testing.T) {
 	store1.DoOp(api.PutArgs{Key: "k2", Value: "v2", Version: 0})
 	store1.DoOp(api.PutArgs{Key: "k1", Value: "v1-2", Version: 1})
 
-	snap := store1.Snapshot()
+	snap, err := store1.Snapshot()
+	assert.NoError(t, err)
 
 	store2 := NewStore()
-	store2.Restore(snap)
+	err = store2.Restore(snap)
+	assert.NoError(t, err)
 
 	res := store2.DoOp(api.GetArgs{Key: "k1"})
 	getRes := res.(api.GetReply)

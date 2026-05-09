@@ -1,7 +1,7 @@
 package testutils
 
 import (
-	"kvraft/raftapi"
+	"kvraft/raft"
 	"sync"
 )
 
@@ -9,16 +9,16 @@ import (
 type MockRaft struct {
 	mu            sync.Mutex
 	me            int
-	applyCh       chan raftapi.ApplyMsg
+	applyCh       chan raft.ApplyMsg
 	currentTerm   int
 	isLeader      bool
 	currentLeader int
 	nextIndex     int
-	persister     raftapi.Persister
-	msgQueue      chan raftapi.ApplyMsg
+	persister     raft.Persister
+	msgQueue      chan raft.ApplyMsg
 }
 
-func NewMockRaft(me int, applyCh chan raftapi.ApplyMsg, persister raftapi.Persister) *MockRaft {
+func NewMockRaft(me int, applyCh chan raft.ApplyMsg, persister raft.Persister) *MockRaft {
 	m := &MockRaft{
 		me:            me,
 		applyCh:       applyCh,
@@ -27,7 +27,7 @@ func NewMockRaft(me int, applyCh chan raftapi.ApplyMsg, persister raftapi.Persis
 		currentLeader: me,
 		nextIndex:     1,
 		persister:     persister,
-		msgQueue:      make(chan raftapi.ApplyMsg, 1000),
+		msgQueue:      make(chan raft.ApplyMsg, 1000),
 	}
 	go m.processQueue()
 	return m
@@ -41,19 +41,19 @@ func (m *MockRaft) processQueue() {
 	}
 }
 
-func (m *MockRaft) GetState() (int, bool) {
+func (m *MockRaft) State() (int, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.currentTerm, m.isLeader
 }
 
-func (m *MockRaft) GetLeader() int {
+func (m *MockRaft) Leader() int {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.currentLeader
 }
 
-func (m *MockRaft) Start(command interface{}) (int, int, bool) {
+func (m *MockRaft) Start(command any) (int, int, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -65,7 +65,7 @@ func (m *MockRaft) Start(command interface{}) (int, int, bool) {
 	term := m.currentTerm
 	m.nextIndex++
 
-	m.msgQueue <- raftapi.ApplyMsg{
+	m.msgQueue <- raft.ApplyMsg{
 		CommandValid: true,
 		Command:      command,
 		CommandIndex: index,
