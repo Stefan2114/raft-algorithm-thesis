@@ -1,4 +1,4 @@
-package models
+package testutils
 
 import (
 	"fmt"
@@ -45,12 +45,12 @@ var KvModel = porcupine.Model{
 		}
 		return ret
 	},
-	Init: func() interface{} {
+	Init: func() any {
 		// note: we are modeling a single key's value here;
 		// we're partitioning by key, so this is okay
 		return KvState{Value: "", Version: 0}
 	},
-	Step: func(state, input, output interface{}) (bool, interface{}) {
+	Step: func(state, input, output any) (bool, any) {
 		inp := input.(KvInput)
 		out := output.(KvOutput)
 		st := state.(KvState)
@@ -58,9 +58,12 @@ var KvModel = porcupine.Model{
 		switch inp.Op {
 		case 0: // get
 			if out.Err == string(api.OK) {
-				return out.Value == st.Value, st
+				return out.Value == st.Value && out.Version == st.Version, st
 			}
-			return true, st
+			if out.Err == string(api.ErrNoKey) {
+				return st.Version == 0, st
+			}
+			return true, st // For other errors like ErrWrongLeader, we can't say much
 		case 1: // put
 			if out.Err == string(api.OK) {
 				if st.Version == inp.Version {
@@ -69,7 +72,12 @@ var KvModel = porcupine.Model{
 				return false, st
 			}
 
+			if out.Err == string(api.ErrVersion) {
+				return st.Version != inp.Version, st
+			}
+
 			if out.Err == string(api.ErrMaybe) {
+				// If it's Maybe, it might have happened or not
 				if st.Version == inp.Version {
 					return true, KvState{Value: inp.Value, Version: st.Version + 1}
 				}
@@ -81,7 +89,7 @@ var KvModel = porcupine.Model{
 			return false, st
 		}
 	},
-	DescribeOperation: func(input, output interface{}) string {
+	DescribeOperation: func(input, output any) string {
 		inp := input.(KvInput)
 		out := output.(KvOutput)
 		switch inp.Op {

@@ -100,7 +100,7 @@ To configure and run the cluster using Docker:
 ```bash
 # Generate docker-compose.yml and monitoring configs
 # You can customize timeouts and ports via CLI arguments
-./setup_cluster.py ../cluster.json --election-min 1000 --heartbeat 200
+./setup_cluster.py ../cluster.json
 
 # Start the generated cluster in the background
 docker-compose up -d --build
@@ -115,13 +115,14 @@ The cluster behavior can be customized during the setup phase using command-line
 | Argument | Description | Default | Environment Variable |
 |----------|-------------|---------|----------------------|
 | `config` | **(Required)** Path to `cluster.json` topology. | N/A | `CONFIG_PATH` |
-| `--election-min` | Minimum election timeout (ms). | `600` | `RAFT_ELECTION_TIMEOUT_MIN` |
-| `--election-rand` | Random jitter for election timeout (ms). | `400` | `RAFT_ELECTION_TIMEOUT_RAND` |
-| `--heartbeat` | Heartbeat interval (ms). | `100` | `RAFT_HEARTBEAT_TIMEOUT` |
+| `--election-min` | Minimum election timeout (ms). | `150` | `RAFT_ELECTION_TIMEOUT_MIN` |
+| `--election-rand` | Random jitter for election timeout (ms). | `150` | `RAFT_ELECTION_TIMEOUT_RAND` |
+| `--heartbeat` | Heartbeat interval (ms). | `50` | `RAFT_HEARTBEAT_TIMEOUT` |
 | `--submit-timeout` | RSM command commit timeout (seconds). | `10` | `RSM_SUBMIT_TIMEOUT` |
 | `--metrics-port-base`| Base port for Prometheus metrics. | `8080` | `METRICS_PORT_BASE` |
 | `--clerk-rpc-timeout`| Clerk RPC call timeout (seconds). | `5` | `CLERK_RPC_TIMEOUT` |
 | `--clerk-retry-sleep`| Clerk cluster-wide retry delay (ms). | `20` | `CLERK_RETRY_SLEEP` |
+| `--max-raft-state` | Snapshot when persist size exceeds this (bytes).| `1000000` | `MAX_RAFT_STATE` |
 
 > [!IMPORTANT]
 > The `cluster.json` file is strictly used for defining the network topology (node IDs and addresses). All performance-related settings (timeouts, delays) are managed via environment variables and should be configured through the `setup_cluster.py` script.
@@ -139,6 +140,23 @@ When you are finished testing, cleanly shut down the cluster:
 ```bash
 docker-compose down
 ```
+
+---
+
+## Performance Tuning & Snapshots
+
+The cluster's stability and performance depend on finding the right balance for your environment.
+
+### Snapshot Threshold (`--max-raft-state`)
+This setting determines when a node "compacts" its log by taking a snapshot.
+- **Production (`1000000`+)**: Setting this to 1MB or more ensures that nodes don't spend too much CPU/Disk I/O constantly snapshotting. It keeps the persistent state small enough for fast restarts.
+- **Testing (`1000`)**: Setting this to a very small value (like 1KB) is highly recommended during development. It forces nodes to snapshot and restore state frequently, ensuring your persistence logic is robust and consistent.
+
+### Raft Timeouts
+- **Stability**: If you see frequent leader changes in your logs without node failures, your `election-min` might be too low or your network latency too high. Increase these values to make the cluster more "stubborn."
+- **Recovery Speed**: Lower values make the cluster detect failures faster, but increase the risk of "split-brain" elections where no leader is chosen because everyone timed out at once. Always keep `election-rand` significant enough to prevent this.
+
+---
 
 ## Observability & Monitoring
 
@@ -397,7 +415,7 @@ The RSM component acts as a bridge between the KV Server and Raft. It uses `Make
 
 ###### The Struct
 ```go
-// Taken from internal/rsm/rsm.go
+// Taken from internal/sm/sm.go
 type RSM struct {
 	mu           sync.Mutex
 	me           int
@@ -413,7 +431,7 @@ type RSM struct {
 
 #### The Factory Function
 ```go
-// Taken from internal/rsm/rsm.go
+// Taken from internal/sm/sm.go
 func MakeRSM(servers []raft.Transport, me int, persister raft.Persister, maxRaftState int, sm StateMachine, logger *zap.Logger) *RSM {
 	rsm := &RSM{
 		me:           me,
@@ -421,7 +439,7 @@ func MakeRSM(servers []raft.Transport, me int, persister raft.Persister, maxRaft
 		applyCh:      make(chan raftapi.ApplyMsg),
 		sm:           sm,
 		pending:      make(map[int]*pendingEntry),
-		logger:       logger.With(zap.Int("node", me), zap.String("component", "rsm")),
+		logger:       logger.With(zap.Int("node", me), zap.String("component", "sm")),
 	}
 	if !useRaftStateMachine {
 		rsm.rf = raft.Make(servers, me, persister, rsm.applyCh, logger)
@@ -442,7 +460,7 @@ func MakeRSM(servers []raft.Transport, me int, persister raft.Persister, maxRaft
     - **Purpose**: Processes the stream of committed messages coming from Raft.
     - **Logic**: It loops over `applyCh`. For each message, it either restores a snapshot or executes a command using the `StateMachine` interface. It also wakes up any client requests waiting in `pending` and triggers snapshots if the log size exceeds `maxRaftState`.
     ```go
-    // Taken from internal/rsm/rsm.go
+    // Taken from internal/sm/sm.go
     func (rsm *RSM) reader() {
         for msg := range rsm.applyCh {
             if msg.SnapshotValid {
@@ -709,7 +727,7 @@ func (ck *Clerk) Put(key string, value string, version api.TVersion) api.Err {
 When the server receives the gRPC request, the `RSM` (Replicated State Machine) creates an `Op` object. This is our "Command" object.
 
 ```go
-// Source: internal/rsm/rsm.go
+// Source: internal/sm/sm.go
 type Op struct {
 	Me  int
 	Id  int64 // Unique ID to match Submit with the applied result
@@ -737,7 +755,7 @@ type PutArgs struct {
 When a client request arrives at the server, the `RSM` (Replicated State Machine) acts as the **Invoker**. It wraps the request into an `Op` object and hands it to Raft for agreement.
 
 ```go
-// Source: internal/rsm/rsm.go
+// Source: internal/sm/sm.go
 func (rsm *RSM) Submit(req any) (api.Err, any) {
 	id := randValue()
 	op := Op{Me: rsm.me, Id: id, Req: req}
@@ -792,7 +810,7 @@ Once Raft reaches consensus, the command is committed and "applied." The `RSM` r
 
 ##### RSM Dispatch Logic
 ```go
-// Source: internal/rsm/rsm.go
+// Source: internal/sm/sm.go
 func (rsm *RSM) handleCommand(msg raftapi.ApplyMsg) {
 	op, ok := msg.Command.(Op)
 	// ... 
@@ -864,7 +882,7 @@ The Raft consensus algorithm ensures that all nodes agree on a log of operations
 Defined in `kvraft/raftapi/raftapi.go`:
 
 ```go
-// From: kvraft/raftapi/raftapi.go
+// From: kvraft/raft/raft.go
 type ApplyMsg struct {
 	CommandValid bool
 	Command      interface{}
@@ -913,7 +931,7 @@ func (rf *Raft) applier() {
 The RSM starts a background `reader` goroutine that "subscribes" to the `applyCh` by looping over it.
 
 ```go
-// From: kvraft/internal/rsm/rsm.go
+// From: kvraft/internal/sm/sm.go
 func (rsm *RSM) reader() {
 	for msg := range rsm.applyCh {
 		if msg.SnapshotValid {
@@ -938,7 +956,7 @@ When a client sends a request (e.g., `Put` or `Get`), the `Submit` method is cal
 The RSM maintains a map of "pending" observers. Each observer is a channel waiting for a specific log index.
 
 ```go
-// From: kvraft/internal/rsm/rsm.go
+// From: kvraft/internal/sm/sm.go
 type result struct {
 	id  int64
 	val any
@@ -955,7 +973,7 @@ type pendingEntry struct {
 The `Submit` method creates a unique channel, registers it in the `pending` map, and then **blocks** waiting for a signal.
 
 ```go
-// From: kvraft/internal/rsm/rsm.go
+// From: kvraft/internal/sm/sm.go
 func (rsm *RSM) Submit(req any) (api.Err, any) {
 	id := randValue()
 	op := Op{Me: rsm.me, Id: id, Req: req}
@@ -988,7 +1006,7 @@ func (rsm *RSM) Submit(req any) (api.Err, any) {
 Once the `reader` goroutine receives a committed message from Raft and applies it to the KV store, it notifies the waiting `Submit` call via the registered channel.
 
 ```go
-// From: kvraft/internal/rsm/rsm.go
+// From: kvraft/internal/sm/sm.go
 func (rsm *RSM) notifyPending(index int, id int64, val any) {
 	entry, exists := rsm.pending[index]
 

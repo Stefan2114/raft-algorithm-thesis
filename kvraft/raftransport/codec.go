@@ -5,8 +5,8 @@ import (
 	"encoding/gob"
 	"fmt"
 
-	"kvraft/internal/raft"
 	kvpb "kvraft/pb"
+	"kvraft/raft"
 )
 
 func entriesToProto(entries []raft.Entry) ([]*kvpb.LogEntry, error) {

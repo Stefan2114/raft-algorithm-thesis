@@ -14,10 +14,10 @@ import (
 	"kvraft/config"
 	"kvraft/internal/logger"
 	"kvraft/internal/metrics"
-	"kvraft/internal/raft"
+	raftimpl "kvraft/internal/raft"
 	"kvraft/internal/rsm"
 	kvpb "kvraft/pb"
-	"kvraft/persist"
+	"kvraft/raft"
 	"kvraft/raftransport"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -28,7 +28,7 @@ type Node struct {
 	lis         net.Listener
 	grpcSrv     *grpc.Server
 	rsm         *rsm.RSM
-	raftCore    *raft.Raft
+	raftCore    raft.Raft
 	connections []*grpc.ClientConn
 }
 
@@ -60,7 +60,7 @@ func StartNode(cfg *config.Config, nodeID int, dataDir string, maxRaftState int,
 	}
 	raftransport.RegisterRaftGobTypes()
 
-	ps, err := persist.MakeFilePersister(dataDir)
+	ps, err := raftimpl.MakeFilePersister(dataDir)
 	if err != nil {
 		return nil, err
 	}
@@ -95,11 +95,7 @@ func StartNode(cfg *config.Config, nodeID int, dataDir string, maxRaftState int,
 		time.Duration(cfg.HeartbeatTimeout)*time.Millisecond,
 		time.Duration(cfg.SubmitTimeout)*time.Second)
 
-	rf, ok := rsmInst.Raft().(*raft.Raft)
-	if !ok {
-		return nil, fmt.Errorf("raft concrete type assertion failed")
-	}
-
+	rf := rsmInst.Raft()
 	lis, err := net.Listen("tcp", cfg.Nodes[me].Addr)
 	if err != nil {
 		for _, c := range connections {
@@ -109,7 +105,11 @@ func StartNode(cfg *config.Config, nodeID int, dataDir string, maxRaftState int,
 	}
 
 	srv := grpc.NewServer()
-	kvpb.RegisterRaftServer(srv, &raftransport.RaftService{RF: rf})
+	rfRPC, ok := rf.(raft.RaftRPC)
+	if !ok {
+		return nil, fmt.Errorf("raft RPC interface assertion failed")
+	}
+	kvpb.RegisterRaftServer(srv, &raftransport.RaftService{RF: rfRPC})
 	kvpb.RegisterKVServer(srv, &KVService{RSM: rsmInst})
 
 	go func() {

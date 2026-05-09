@@ -11,9 +11,9 @@ services:
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
       - LOG_PATH=/logs/node0.log
-      - RAFT_ELECTION_TIMEOUT_MIN=600
-      - RAFT_ELECTION_TIMEOUT_RAND=400
-      - RAFT_HEARTBEAT_TIMEOUT=100
+      - RAFT_ELECTION_TIMEOUT_MIN=150
+      - RAFT_ELECTION_TIMEOUT_RAND=150
+      - RAFT_HEARTBEAT_TIMEOUT=50
       - RSM_SUBMIT_TIMEOUT=10
       - GRPC_BASE_DELAY=100
       - GRPC_MAX_DELAY=3
@@ -21,6 +21,7 @@ services:
       - METRICS_PORT_BASE=8080
       - CLERK_RPC_TIMEOUT=5
       - CLERK_RETRY_SLEEP=20
+      - MAX_RAFT_STATE=1000000
     volumes:
       - ../cluster.json:/app/cluster.json:ro
       - node0_data:/data
@@ -36,9 +37,9 @@ services:
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
       - LOG_PATH=/logs/node1.log
-      - RAFT_ELECTION_TIMEOUT_MIN=600
-      - RAFT_ELECTION_TIMEOUT_RAND=400
-      - RAFT_HEARTBEAT_TIMEOUT=100
+      - RAFT_ELECTION_TIMEOUT_MIN=150
+      - RAFT_ELECTION_TIMEOUT_RAND=150
+      - RAFT_HEARTBEAT_TIMEOUT=50
       - RSM_SUBMIT_TIMEOUT=10
       - GRPC_BASE_DELAY=100
       - GRPC_MAX_DELAY=3
@@ -46,6 +47,7 @@ services:
       - METRICS_PORT_BASE=8080
       - CLERK_RPC_TIMEOUT=5
       - CLERK_RETRY_SLEEP=20
+      - MAX_RAFT_STATE=1000000
     volumes:
       - ../cluster.json:/app/cluster.json:ro
       - node1_data:/data
@@ -61,9 +63,9 @@ services:
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
       - LOG_PATH=/logs/node2.log
-      - RAFT_ELECTION_TIMEOUT_MIN=600
-      - RAFT_ELECTION_TIMEOUT_RAND=400
-      - RAFT_HEARTBEAT_TIMEOUT=100
+      - RAFT_ELECTION_TIMEOUT_MIN=150
+      - RAFT_ELECTION_TIMEOUT_RAND=150
+      - RAFT_HEARTBEAT_TIMEOUT=50
       - RSM_SUBMIT_TIMEOUT=10
       - GRPC_BASE_DELAY=100
       - GRPC_MAX_DELAY=3
@@ -71,6 +73,7 @@ services:
       - METRICS_PORT_BASE=8080
       - CLERK_RPC_TIMEOUT=5
       - CLERK_RETRY_SLEEP=20
+      - MAX_RAFT_STATE=1000000
     volumes:
       - ../cluster.json:/app/cluster.json:ro
       - node2_data:/data
@@ -86,9 +89,9 @@ services:
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
       - LOG_PATH=/logs/node3.log
-      - RAFT_ELECTION_TIMEOUT_MIN=600
-      - RAFT_ELECTION_TIMEOUT_RAND=400
-      - RAFT_HEARTBEAT_TIMEOUT=100
+      - RAFT_ELECTION_TIMEOUT_MIN=150
+      - RAFT_ELECTION_TIMEOUT_RAND=150
+      - RAFT_HEARTBEAT_TIMEOUT=50
       - RSM_SUBMIT_TIMEOUT=10
       - GRPC_BASE_DELAY=100
       - GRPC_MAX_DELAY=3
@@ -96,6 +99,7 @@ services:
       - METRICS_PORT_BASE=8080
       - CLERK_RPC_TIMEOUT=5
       - CLERK_RETRY_SLEEP=20
+      - MAX_RAFT_STATE=1000000
     volumes:
       - ../cluster.json:/app/cluster.json:ro
       - node3_data:/data
@@ -111,9 +115,9 @@ services:
       - CONFIG_PATH=/app/cluster.json
       - DATA_DIR=/data
       - LOG_PATH=/logs/node4.log
-      - RAFT_ELECTION_TIMEOUT_MIN=600
-      - RAFT_ELECTION_TIMEOUT_RAND=400
-      - RAFT_HEARTBEAT_TIMEOUT=100
+      - RAFT_ELECTION_TIMEOUT_MIN=150
+      - RAFT_ELECTION_TIMEOUT_RAND=150
+      - RAFT_HEARTBEAT_TIMEOUT=50
       - RSM_SUBMIT_TIMEOUT=10
       - GRPC_BASE_DELAY=100
       - GRPC_MAX_DELAY=3
@@ -121,6 +125,7 @@ services:
       - METRICS_PORT_BASE=8080
       - CLERK_RPC_TIMEOUT=5
       - CLERK_RETRY_SLEEP=20
+      - MAX_RAFT_STATE=1000000
     volumes:
       - ../cluster.json:/app/cluster.json:ro
       - node4_data:/data

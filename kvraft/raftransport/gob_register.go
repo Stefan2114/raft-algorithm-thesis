@@ -2,14 +2,13 @@ package raftransport
 
 import (
 	"encoding/gob"
+	"kvraft/sm"
 
 	"kvraft/api"
-	"kvraft/internal/rsm"
 )
 
-// RegisterRaftGobTypes registers types that appear in replicated log entries.
 func RegisterRaftGobTypes() {
-	gob.Register(rsm.Op{})
+	gob.Register(sm.Op{})
 	gob.Register(api.GetArgs{})
 	gob.Register(api.PutArgs{})
 	gob.Register(api.GetReply{})

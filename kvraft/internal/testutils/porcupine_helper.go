@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/anishathalye/porcupine"
-	"kvraft/internal/models"
 )
 
 type OpLog struct {
@@ -23,7 +22,7 @@ func NewOpLog() *OpLog {
 	}
 }
 
-func (l *OpLog) Append(input models.KvInput, output models.KvOutput, start, end time.Time, clientId int) {
+func (l *OpLog) Append(input KvInput, output KvOutput, start, end time.Time, clientId int) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	l.operations = append(l.operations, porcupine.Operation{
@@ -41,17 +40,18 @@ func (l *OpLog) Check(t *testing.T) {
 	copy(ops, l.operations)
 	l.mu.Unlock()
 
-	res, info := porcupine.CheckOperationsVerbose(models.KvModel, ops, 5*time.Second)
-	if res == porcupine.Illegal {
+	res, info := porcupine.CheckOperationsVerbose(KvModel, ops, 5*time.Second)
+	switch res {
+	case porcupine.Illegal:
 		file, err := os.CreateTemp("", "porcupine-*.html")
 		if err == nil {
-			_ = porcupine.Visualize(models.KvModel, info, file)
+			_ = porcupine.Visualize(KvModel, info, file)
 			fmt.Printf("Linearizability violation! Visualization saved to %s\n", file.Name())
 		}
 		t.Fatal("History is NOT linearizable")
-	} else if res == porcupine.Unknown {
+	case porcupine.Unknown:
 		t.Log("Linearizability check timed out, assuming OK")
-	} else {
+	default:
 		t.Log("Linearizability check PASSED")
 	}
 }

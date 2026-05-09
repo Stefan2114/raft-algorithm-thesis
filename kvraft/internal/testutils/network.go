@@ -14,7 +14,7 @@ import (
 
 type Network struct {
 	mu           sync.Mutex
-	servers      map[int]interface{}
+	servers      map[int]any
 	connections  map[int]map[int]bool
 	dropRate     float64
 	delayRate    float64
@@ -26,7 +26,7 @@ type Network struct {
 
 func NewNetwork() *Network {
 	return &Network{
-		servers:     make(map[int]interface{}),
+		servers:     make(map[int]any),
 		connections: make(map[int]map[int]bool),
 		rpcCounts:   make(map[int]*int64),
 		isReliable:  true,
@@ -61,7 +61,7 @@ func (n *Network) ResetRPCCounts() {
 	}
 }
 
-func (n *Network) AddServer(id int, server interface{}) {
+func (n *Network) AddServer(id int, server any) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	n.servers[id] = server
@@ -87,7 +87,7 @@ func (n *Network) Disconnect(from int, to int) {
 	n.connections[from][to] = false
 }
 
-func (n *Network) Call(from int, to int, method string, args interface{}, reply interface{}) bool {
+func (n *Network) Call(from int, to int, method string, args any, reply any) bool {
 	n.mu.Lock()
 	server, exists := n.servers[to]
 	connected := n.connections[from][to] && n.connections[to][from]
@@ -154,12 +154,12 @@ type MockTransport struct {
 	peer int
 }
 
-func (t *MockTransport) Call(method string, args interface{}, reply interface{}) bool {
+func (t *MockTransport) Call(method string, args any, reply any) bool {
 	return t.net.Call(t.me, t.peer, method, args, reply)
 }
 
-func MakeMockTransports(net *Network, me int, numServers int) []interface{} {
-	transports := make([]interface{}, numServers)
+func MakeMockTransports(net *Network, me int, numServers int) []any {
+	transports := make([]any, numServers)
 	for i := 0; i < numServers; i++ {
 		transports[i] = &MockTransport{
 			net:  net,

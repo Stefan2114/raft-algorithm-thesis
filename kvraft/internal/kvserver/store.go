@@ -63,18 +63,18 @@ func (s *Store) DoOp(req any) any {
 	}
 }
 
-func (s *Store) Snapshot() []byte {
+func (s *Store) Snapshot() ([]byte, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	w := new(bytes.Buffer)
 	enc := gob.NewEncoder(w)
 	if err := enc.Encode(s.kv); err != nil {
-		panic(err)
+		return nil, err
 	}
-	return w.Bytes()
+	return w.Bytes(), nil
 }
 
-func (s *Store) Restore(data []byte) {
+func (s *Store) Restore(data []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if len(data) == 0 {
@@ -82,10 +82,11 @@ func (s *Store) Restore(data []byte) {
 			Value   string
 			Version api.TVersion
 		})
-		return
+		return nil
 	}
 	dec := gob.NewDecoder(bytes.NewReader(data))
 	if err := dec.Decode(&s.kv); err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }
