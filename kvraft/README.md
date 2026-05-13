@@ -122,7 +122,7 @@ The cluster behavior can be customized during the setup phase using command-line
 | `--metrics-port-base`| Base port for Prometheus metrics. | `8080` | `METRICS_PORT_BASE` |
 | `--clerk-rpc-timeout`| Clerk RPC call timeout (seconds). | `5` | `CLERK_RPC_TIMEOUT` |
 | `--clerk-retry-sleep`| Clerk cluster-wide retry delay (ms). | `20` | `CLERK_RETRY_SLEEP` |
-| `--max-raft-state` | Snapshot when persist size exceeds this (bytes).| `1000000` | `MAX_RAFT_STATE` |
+| `--max-raft-state` | Snapshot when persist size exceeds this (bytes).| `100000` | `MAX_RAFT_STATE` |
 
 > [!IMPORTANT]
 > The `cluster.json` file is strictly used for defining the network topology (node IDs and addresses). All performance-related settings (timeouts, delays) are managed via environment variables and should be configured through the `setup_cluster.py` script.
