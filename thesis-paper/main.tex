@@ -1,0 +1,43 @@
+\documentclass[12pt]{report} 
+
+\usepackage[language=english, type=bachelor]{style}
+
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\lhead{}
+\chead{}
+\renewcommand{\headrulewidth}{0.2pt}
+\renewcommand{\footrulewidth}{0.2pt}
+
+\begin{document}
+
+\specialization{Computer Science}    
+\title{Design and Implementation of Consistent State Machine Replication using Raft Consensus Algorithm}                     
+\author{Ştefan Toma}                                            
+\supervisor{Lect. Dr. Iuliana Bocicor}                
+                
+\maketitle
+
+\pagenumbering{roman} 
+
+\clearpage
+\input{chapters/abstract}
+
+\tableofcontents
+
+\newpage
+\pagenumbering{arabic}
+
+\input{chapters/01_introduction}
+\input{chapters/02_theoretical_background}
+\input{chapters/03_state_of_the_art}
+\input{chapters/04_system_requirements_and_architecture}
+\input{chapters/05_raft_implementation}
+\input{chapters/06_replication_and_consistency}
+\input{chapters/07_infrastructure}
+\input{chapters/08_evaluation}
+\input{chapters/09_conclusions}
+
+\bibliography{references}
+
+\end{document}

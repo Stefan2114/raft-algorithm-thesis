@@ -1,0 +1,181 @@
+\chapter{Theoretical Background}
+\label{ch:theoretical_background}
+
+TODO I don't like this start
+Also i don't know if i should us Replicated State Machine or State Machine Replciation. And if i need to put (RSM) after
+
+Building a reliable distributed system requires a solid theoretical foundation in state replication and fault tolerance. The core of this framework relies on the Replicated State Machine (RSM) paradigm and the Raft consensus algorithm, which together ensure that multiple nodes execute identical command sequences and safely survive node failures.
+
+\section{Distributed Consensus: The Concept of Replicated State Machines}
+In a distributed system, consensus involves multiple independent nodes reaching agreement on a single data value or a sequence of operations. This agreement must be maintained even if some nodes fail or if the network becomes unreliable. The most common approach to implementing a fault-tolerant service is the Replicated State Machine (RSM) architecture.
+
+\subsection{The RSM Paradigm}
+The Replicated State Machine paradigm \cite{Schneider1990} is based on the idea that if multiple identical copies of a deterministic state machine start in the same initial state and execute the same sequence of commands in the same order, they will all produce the same sequence of outputs and arrive at the same final state. 
+
+In this architecture, the service is implemented by replicating the state machine across multiple servers. Each server maintains a "replicated log" containing the commands. The role of the consensus algorithm is to ensure that all logs eventually contain the same commands in the same order, even if some servers fail.
+
+TODO I don't like how they are presented. Like ok the State Machine is ok, is clear, but then i have the raft.go and rsm.go. I don't feel like those are presented as it should. The explanation of the Client is ok but i think it should be ilustrated more that the first 3 are one component called that i called node and there are multiple nodes that form the cluster. And the clients communicate only with the leader node. But maybe this should be mentioned only further in the paper
+The RSM architecture consists of four primary components:
+\begin{enumerate}
+    \item \textbf{State Machine}: The application-level logic that processes commands. In the context of this thesis, the state machine is the key-value store that executes operations like \texttt{Put} and \texttt{Get}.
+    \item \textbf{Log}: A sequence of commands that have been accepted by the consensus module. The log ensures that commands are persisted and can be replayed in the correct order.
+    \item \textbf{Consensus Module}: The core logic (Raft) that receives commands from clients and communicates with other consensus modules in the cluster to ensure that every command is safely replicated.
+    \item \textbf{Clients}: External entities that submit commands to the consensus module and wait for a response once the command has been applied to the state machine.
+\end{enumerate}
+
+When a client sends a request, it is first received by the consensus module. This module adds the command to its local log and replicates it to other nodes. Once the module is certain that a majority of nodes have the command in their logs, the command is "committed" and passed to the state machine. The state machine executes the command and returns the output to the client. This sequence guarantees that even if a node crashes and restarts, it can reconstruct its internal state by replaying the committed entries in its log.
+
+\subsection{The Importance of Total Ordering}
+A critical requirement for SMR is the total ordering of commands. As noted by Lamport \cite{Lamport1978}, the ability to order events in a distributed system is the key to synchronizing state. Without a consensus algorithm to enforce this order, different nodes might apply operations in different sequences (e.g., a \texttt{Delete(x)} followed by a \texttt{Get(x)} vs. \texttt{Get(x)} followed by a \texttt{Delete(x)}), leading to state divergence and a violation of system integrity.
+TODO I think more should me said here idk
+
+TODO before talking about raft i feel like there is more to say about replicated state machine, like the idea of replacing the other machine
+
+\section{The Raft Consensus Algorithm}
+Raft achieves consensus by first electing a distinguished leader, then giving the leader complete responsibility for managing the replicated log. By decomposing the consensus problem, Raft becomes significantly easier to reason about. This section explores the first critical subproblem: the election of a leader and the management of logical time.
+
+TODO i don't like how it said that this section explores the firt subproblem, the leader election. Because lower it will also talk about replication mecanism and safety
+
+\subsection{Leader Election and Terms as Logical Clocks}
+In a distributed environment, physical clocks are unreliable and cannot be used to coordinate event order across different machines. Raft addresses this by dividing time into \textbf{terms} of arbitrary length.
+Each term begins with an election. If a candidate wins the election, it serves as the leader for the remainder of the term. In some cases, an election might result in a "split vote," where no candidate achieves a majority. In such instances, the term ends immediately, and a new term begins with another election. 
+TODO to check exactly when the term changes
+
+TODO i don't like how much i cite Lamport.
+Terms function as a \textit{logical clock} system \cite{Lamport1978}. Each node maintains a \texttt{currentTerm} variable, which must be persisted to stable storage. This allows nodes to detect "stale" leaders or candidates. If a node receives a request with a term smaller than its current term, it rejects the request. Conversely, if a leader or candidate discovers its term is out of date, it immediately reverts to the \texttt{Follower} state and updates its local term.
+
+TODO i think i should talk about this before explaing the term clock
+\subsubsection{State Transitions and Election Mechanics}
+At any given time, a Raft node exists in one of three states: \textbf{Follower}, \textbf{Candidate}, or \textbf{Leader}.
+The transitions between these states are governed by election timeouts and voting results.
+The process of election follows a specific sequence:
+\begin{enumerate}
+    \item \textbf{Election Timeout}: A node starts as a Follower. If it receives no communication (heartbeats) from a Leader for a randomized period, it assumes no leader is active and transitions to the Candidate state.
+    \item \textbf{RequestVote RPC}: The Candidate increments its current term, votes for itself, and issues \texttt{RequestVote} RPCs to all other nodes in the cluster.
+    \item \textbf{Voting Rules}: A node grants its vote to a candidate if the candidate's term is at least as large as the node's current term and the candidate's log is at least as up-to-date as the voter's log. Each node can grant at most one vote per term.
+    \item \textbf{Winning the Election}: A candidate wins if it receives votes from a majority of the nodes. It then immediately begins sending \texttt{AppendEntries} RPCs (heartbeats) to establish its authority and prevent further elections in that term.
+\end{enumerate}
+
+TODO, refactor this to talk more about how raft to continue needs 2/n + 1 of the nodes to agree on the same leader. So it can never happen to leader to become on the same term as the other one wouldn't be able to get the necesarly votes. Also how who the node voted for to be saved so if it comes back to not vote for the same candidate twice. Than how important is the randomized election so split votes can happen more rarely and the cluster to be able to agree on a leader faster
+
+The randomization of election timeouts is a critical design choice in Raft. By ensuring that timeouts are spread across a range, Raft minimizes the likelihood of multiple nodes becoming candidates simultaneously, thereby reducing the frequency of split votes and ensuring rapid convergence on a single leader.
+
+\subsection{Log Replication Mechanism}
+Once a leader has been elected, it begins servicing client requests. Each client request contains a command to be executed by the replicated state machines. The leader appends the command to its log as a new entry and then issues \texttt{AppendEntries} RPCs in parallel to each of the other servers to replicate the entry.
+
+The structure of the Raft log is fundamental to the algorithm's safety.
+Each log entry stores a state machine command along with the term number when the entry was received by the leader.
+The log structure allows the algorithm to maintain the \textit{Log Matching Property}. This property states that if two entries in different logs have the same index and term, then they store the same command and all preceding entries in the logs are identical. This property is enforced through a consistency check performed during every \texttt{AppendEntries} RPC.
+TODO to see if there could be more commands in the same term. I think they can so it should also be mentioned the index of the operation in the logs should match too
+
+TODO, i talk about the lifecycle of a command in another chapter.
+\subsubsection{The Replication Process and Commitment}
+The lifecycle of a log entry follows a strict pipeline to ensure fault tolerance. This process is illustrated in Figure \ref{fig:replication_flow}.
+
+\begin{figure}[htbp]
+    \centering
+    % Setting coordinates for a precise, tight vertical layout
+    \begin{tikzpicture}[
+        node distance=1.8cm and 1.5cm,
+        component/.style={
+            draw, rectangle, rounded corners, 
+            text width=3.8cm, minimum height=1.2cm, 
+            align=center, thick, fill=white, font=\small
+        },
+        arrow/.style={-{Stealth}, thick, shorten >=2pt, shorten <=2pt},
+        bidirectional/.style={{Stealth}-{Stealth}, thick, shorten >=2pt, shorten <=2pt}
+    ]
+        % Vertically aligned cluster components
+        \node[component, fill=blue!10] (Client) at (0, 0) 
+            {\textbf{Client Layer} \\ Sends Command};
+            
+        \node[component, fill=green!10, below=of Client] (Leader) 
+            {\textbf{Consensus Leader} \\ (Raft Core)};
+            
+        \node[component, fill=orange!10, below left=of Leader] (Follower1) 
+            {\textbf{Follower 1} \\ (Raft Core)};
+            
+        \node[component, fill=orange!10, below right=of Leader] (Follower2) 
+            {\textbf{Follower 2} \\ (Raft Core)};
+            
+        \node[component, fill=purple!10, below=of Leader, yshift=-2.2cm] (Commit) 
+            {\textbf{Leader Commit} \\ Apply \& Respond};
+
+        % Connectors to illustrate bi-directional flow and feedback
+        
+        % 1. Client <-> Leader (Request/Response)
+        \draw[bidirectional] (Client.south) -- node[right, font=\scriptsize, align=left] {1. Write Request\\4. Final Response} (Leader.north);
+        
+        % 2. Leader -> Followers (AppendEntries)
+        \draw[arrow] (Leader.south west) -- node[above, font=\scriptsize, sloped] {2. AppendEntries} (Follower1.north);
+        \draw[arrow] (Leader.south east) -- node[above, font=\scriptsize, sloped] {2. AppendEntries} (Follower2.north);
+        
+        % 3. Followers -> Leader (Acknowledge)
+        \draw[arrow] (Follower1.east) .. controls +(right:0.8) and +(left:0.8) .. node[below, font=\scriptsize, sloped] {3. Ack} (Leader.south);
+        \draw[arrow] (Follower2.west) .. controls +(left:0.8) and +(right:0.8) .. node[below, font=\scriptsize, sloped] {3. Ack} (Leader.south);
+
+        % 4. Leader -> Commit (Majority)
+        \draw[arrow] (Leader.south) -- (Commit.north);
+
+    \end{tikzpicture}
+    \caption{The lifecycle of a replicated log entry, showing bidirectional feedback loop between the Client, the Leader, and a majority of the cluster (Followers).}
+    \label{fig:log_replication_flow}
+\end{figure}
+
+As shown in the flow in Figure \ref{fig:log_replication_flow}, the leader handles the replication through the following steps:
+\begin{enumerate}
+    \item \textbf{Local Append}: The leader appends the client's command to its own log.
+    \item \textbf{Parallel Replication}: The leader sends \texttt{AppendEntries} RPCs to all followers. These RPCs include the new entry as well as the index and term of the entry immediately preceding the new one.
+    \item \textbf{Consistency Check}: When a follower receives an \texttt{AppendEntries} RPC, it checks its log for an entry at the \texttt{prevLogIndex} with a matching \texttt{prevLogTerm}. If the check fails, the follower rejects the request, forcing the leader to synchronize the logs by decrementing the next index for that follower.
+    \item \textbf{Quorum Commitment}: An entry is considered "committed" once the leader has replicated it on a majority (quorum) of the servers. The leader keeps track of the highest index it knows to be committed and includes this index in future \texttt{AppendEntries} RPCs.
+    \item \textbf{State Machine Application}: Once a node learns that a log entry is committed, it applies the entry to its local state machine in log order. 
+\end{enumerate}
+TODO i don't like the name "Quorum" i need to replace it 
+I feel like is not ilustrated enough what happens if the leader failed and when it wake up it still thought it was the leader and tried an append entries. It should see there is a new term so a new leader and should switch to follower.
+
+Even if some followers are slow or temporarily disconnected, the leader can continue to process requests as long as a majority of the cluster is active. Once the disconnected followers rejoin, the consistency checks in the \texttt{AppendEntries} RPCs will naturally bring their logs back into alignment with the leader's log.
+TODO I want more focus to this from above
+
+\subsection{Safety Guarantees}
+To ensure the correct operation of the Replicated State Machine, Raft enforces several safety properties. While Leader Election and Log Replication provide the basic mechanics, the safety rules prevent edge cases where a new leader might overwrite committed entries or where different state machines might apply different commands for the same log index.
+
+The most critical of these is the \textbf{Leader Completeness Property}: if a log entry is committed in a given term, then that entry will be present in the logs of the leaders for all higher-numbered terms.
+
+\subsubsection{The Election Restriction}
+Raft uses the voting process to prevent a candidate from winning an election unless its log contains all committed entries.
+Since a candidate must contact a majority of the cluster to win, and every committed entry resides on at least a majority of nodes, there is guaranteed to be at least one node that possesses every committed entry.
+The voting mechanism includes a strict comparison of log "up-to-dateness".
+
+The comparison logic follows two simple rules:
+\begin{enumerate}
+    \item If the logs have last entries with different terms, then the log with the later term is more up-to-date.
+    \item If the logs end with the same term, then whichever log is longer is more up-to-date.
+\end{enumerate}
+By requiring a candidate to have a log at least as up-to-date as the voter to receive a vote, Raft ensures that the leader will always be among the nodes with the most complete set of committed entries.
+
+\subsubsection{Committing Entries from Previous Terms}
+A subtle but vital safety rule in Raft is that a leader cannot conclude that an entry from a previous term is committed just because it is stored on a majority of servers.
+Only entries from the leader's \textit{current} term can be committed by counting replicas.
+This safety requirement demonstrates a potential hazard where an old entry could be overwritten if this rule were not in place.
+
+Once a leader has committed at least one entry from its current term, the Log Matching Property ensures that all prior entries in the log are also committed. This "indirect commitment" is the only safe way to finalize the status of entries inherited from previous leaders.
+
+\subsubsection{Summary of Raft Safety Properties}
+The collective safety of the algorithm is maintained by the properties summarized in Table \ref{tab:raft_safety_properties}.
+
+\begin{table}[h]
+\centering
+\caption{The Five Primary Safety Properties of the Raft Consensus Algorithm.}
+\label{tab:raft_safety_properties}
+\begin{tabularx}{\textwidth}{|l|X|}
+\hline
+\textbf{Property} & \textbf{Description} \\ \hline
+Election Safety & At most one leader can be elected in a given term. \\ \hline
+Leader Append-Only & A leader never overwrites or deletes entries in its log. \\ \hline
+Log Matching & Logs with the same index and term are identical through that index. \\ \hline
+Leader Completeness & Committed entries are present in all future leaders' logs. \\ \hline
+State Machine Safety & If a node applies an entry at an index, no other node will apply different data. \\ \hline
+\end{tabularx}
+\end{table}
+
+The properties listed in Table \ref{tab:raft_safety_properties} work in tandem. For instance, the Leader Completeness property depends on the Election Restriction shown earlier, while the State Machine Safety is the ultimate guarantee that the distributed system behaves like a single, consistent machine to the client.
