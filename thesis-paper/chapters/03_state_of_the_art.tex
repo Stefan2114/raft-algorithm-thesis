@@ -1,0 +1,127 @@
+\chapter{State of the Art}
+\label{ch:state_of_the_art}
+
+Distributed consensus has evolved significantly, moving from early theoretical models to the high-performance systems that underpin modern cloud infrastructure. Understanding this transition from classical protocols like Paxos to modern, understandable consensus engines establishes the necessary context for the architectural decisions made throughout this thesis.
+
+\section{Evolution of Consensus Algorithms}
+The quest for reliability in distributed systems has led to the development of various consensus protocols.
+The primary goal of these algorithms is to allow a collection of independent nodes to agree on a single data value or a sequence of operations, even in the presence of faulty components or network partitions.
+The chronological development of these protocols shows a clear transition from complex theoretical models to more pragmatic, implementation-focused designs.
+
+\subsection{The Classical Approach: Paxos}
+The journey of modern consensus began with Leslie Lamport's Paxos algorithm \cite{Lamport1998}.
+Introduced through the metaphor of a "Part-Time Parliament," Paxos proved that consensus could be achieved in an asynchronous system, provided a majority of nodes were functional.
+Despite its mathematical elegance and proven correctness, Paxos gained a reputation for being exceptionally difficult to understand and implement \cite{PaxosSimple}.
+The original specification left many practical details—such as configuration changes and leader election—as exercises for the implementer, leading to a variety of "Paxos-like" dialects that were often incompatible and difficult to verify.
+
+\subsection{Viewstamped Replication (VSR)}
+Developed around the same time as Paxos, Viewstamped Replication (VSR) \cite{LiskovVSR} provided a similar approach to State Machine Replication (SMR).
+VSR introduced the concept of "views" (similar to Raft's terms), where a primary node directs the replication process.
+While highly influential, it remained less cited in academic literature compared to Paxos until its recent "revisit" in the context of modern distributed systems.
+
+\subsection{ZooKeeper Atomic Broadcast (Zab)}
+As the industry moved toward big data and distributed coordination, the Apache ZooKeeper project introduced Zab (ZooKeeper Atomic Broadcast) \cite{Zab2011}.
+Zab was designed specifically for primary-backup systems to ensure that updates are processed in a strict order.
+Unlike Paxos, which is often used for a single-value agreement, Zab is inherently designed for high-throughput broadcast of state changes.
+
+\subsection{The Shift Toward Understandability: Raft}
+In 2014, Ongaro and Ousterhout introduced Raft \cite{Raft2014}, specifically designed to address the complexity of Paxos.
+Raft decomposes the consensus problem into three relatively independent subproblems: Leader Election, Log Replication, and Safety.
+By enforcing a stronger degree of coherency, Raft reduced the state space that developers must manage, leading to widespread industrial adoption.
+
+This progression highlights how the focus of the research community shifted over three decades.
+While early work like VSR and Paxos focused on proving the possibility of consensus, later developments like Zab and Raft prioritized the practical requirements of building and maintaining production-grade distributed systems.
+
+\section{Industrial Distributed Key-Value Stores}
+The transition of consensus algorithms from academic research to production-ready software has led to the development of several high-performance distributed key-value stores. These systems serve as the critical "source of truth" for infrastructure orchestration, managing metadata that requires the highest levels of availability and consistency. 
+
+\subsection{Standard-Setting Systems: etcd and ZooKeeper}
+Currently, two systems dominate the landscape of distributed coordination, each representing a different lineage of consensus theory.
+
+\paragraph{etcd} 
+Developed by CoreOS and now a graduated project of the Cloud Native Computing Foundation (CNCF), etcd \cite{etcd} is a distributed, reliable key-value store. It is most notably utilized as the primary backing store for Kubernetes, where it manages the entire state of the cluster. etcd is built on a custom, high-performance implementation of the Raft algorithm in Go. Its design emphasizes a modern gRPC-based API and strict adherence to linearizable consistency. 
+
+\paragraph{Apache ZooKeeper} 
+ZooKeeper \cite{Hunt2010} is one of the most mature coordination services in the industry, designed to solve the coordination problems inherent in the Hadoop ecosystem. ZooKeeper uses the Zab (ZooKeeper Atomic Broadcast) protocol \cite{Zab2011}. While Zab shares many conceptual similarities with Raft—such as the use of a leader and a replicated log—it was developed independently and features a unique recovery mode that differs significantly from Raft's leader election phase.
+
+\subsection{Paxos in Industry: Google Spanner}
+While Raft has gained popularity for its understandability, Paxos remains the foundation of some of the world's most scalable systems. 
+
+\paragraph{Google Spanner} 
+Google Spanner \cite{Spanner2013} is a globally distributed database that provides multi-version, synchronous replication and strong consistency. Unlike the single-cluster focus of many Raft implementations, Spanner utilizes Paxos to replicate data across multiple data centers worldwide. It organizes data into "directories" and uses a Paxos group for each directory to manage replication. Spanner is particularly relevant to this thesis as it demonstrates that Paxos, despite its complexity, can support a highly available key-value and relational interface at a global scale.
+
+\subsection{Modern Raft Alternatives and Specialized Implementations}
+As distributed systems evolved, new alternatives emerged to address specific performance bottlenecks or to integrate better with specific programming environments.
+
+\paragraph{TiKV and Multi-Raft Architecture}
+TiKV \cite{TiKV2020} is a distributed transactional key-value database. It utilizes the Raft algorithm but introduces a "Multi-Raft" architecture. In this design, the data is partitioned into "Regions," and each region is managed by its own independent Raft group. This allows TiKV to scale horizontally across thousands of nodes by distributing the consensus workload.
+
+\paragraph{HashiCorp Consul}
+Consul \cite{Consul} is a service-mesh solution that includes a distributed key-value store. Like etcd, it employs the Raft algorithm to ensure consistency among its server nodes. Consul is frequently selected in environments where integrated health checking and cross-datacenter replication are primary requirements.
+
+\paragraph{SOFAJRaft} 
+In the Java ecosystem, SOFAJRaft \cite{SOFAJRaft} provides a production-grade implementation used extensively in financial systems by Ant Group. It is a Java-based implementation of Raft that is highly optimized for low-latency scenarios, making it a relevant point of comparison for the Java-based client components developed in this project.
+
+\begin{table}[h]
+\centering
+\caption{Comparative analysis of industrial distributed consensus systems and their architectural properties.}
+\label{tab:system_comparison}
+\begin{tabular}{|l|l|l|l|}
+\hline
+\textbf{System} & \textbf{Algorithm} & \textbf{Language} & \textbf{Primary Use Case} \\ \hline
+etcd            & Raft               & Go                & Kubernetes Metadata       \\ \hline
+ZooKeeper       & Zab                & Java              & Hadoop/Kafka Coordination \\ \hline
+Google Spanner  & Paxos              & C++/Go            & Global Distributed DB     \\ \hline
+TiKV            & Raft               & Rust              & Scalable Databases (HTAP) \\ \hline
+Consul          & Raft               & Go                & Service Discovery/Mesh    \\ \hline
+SOFAJRaft       & Raft               & Java              & High-Perf Financial Apps  \\ \hline
+\end{tabular}
+\end{table}
+
+The data presented in Table \ref{tab:system_comparison} illustrates a significant industry trend: while older or extremely large-scale global systems like ZooKeeper and Google Spanner utilize Zab or Paxos, almost every modern distributed key-value store (TiKV, Consul, etcd) has converged on the Raft algorithm. This convergence is largely due to Raft's focus on understandability and the ease with which its safety invariants can be implemented and verified compared to the classical Paxos approach.
+
+
+=============================================================================
+TODO, this shouldn't be talked here, should be in state of the art
+\section{Comparison with Alternative Algorithms: Paxos versus Raft}
+While Raft and Paxos provide equivalent safety and liveness guarantees (both are based on a majority quorum), they differ significantly in their approach to state management and understandability. The primary criticism of multi-decree Paxos is not its correctness, but its opacity and the complexity of its implementation. As highlighted by Chandra et al. \cite{Chandra2007}, there is a wide gap between the theoretical description of Paxos and the requirements of a production-ready system.
+
+In contrast, Raft decomposes the consensus problem into relatively independent subproblems—Leader Election, Log Replication, and Safety—and enforces a stronger, more rigid invariant on the leader's state. This "strong leader" approach restricts the state space, making the log behavior predictable and easier to verify. The transition from Paxos to Raft reflects a shift in the research community toward practical, understandable implementations that can be maintained in large-scale production environments.
+
+\subsection{The Complexity of Paxos}
+The primary criticism of Paxos is not its correctness, but its opacity. As noted in the seminal paper "Paxos Made Live" \cite{Chandra2007}, there is a significant gap between the theoretical description of Paxos and the requirements of a production-ready system. The authors observed that "despite the existing literature, building such a system is a non-trivial effort."
+
+Several factors contribute to the complexity of Paxos:
+\begin{itemize}
+    \item \textbf{Single-Decree Focus}: Original Paxos (Basic Paxos) achieves consensus on only a single value. To build a Replicated State Machine, one must implement "Multi-Paxos," which is significantly more complex and often underspecified in academic literature.
+    \item \textbf{Symmetry of Roles}: Paxos allows any node to act as a proposer at any time. While mathematically elegant, this lack of a strong leader leads to "dueling proposers" and complicates the log replication process.
+    \item \textbf{Implementation Gaps}: Important practical details, such as cluster membership changes and log compaction, were not addressed in the original Paxos specification, leading every implementer to create their own (often incompatible) variations.
+\end{itemize}
+
+\subsection{The Shift to Raft: Design for Understandability}
+Raft was explicitly designed to be more "understandable" than Paxos while maintaining the same performance profile.
+The core philosophy of the shift toward Raft is the decomposition of the consensus problem into independent subproblems (Election, Replication, and Safety) and the enforcement of a stronger degree of coherency.
+The fundamental difference in log management lies in the flow of data.
+
+This mechanism highlights Raft's "Strong Leader" model.
+Unlike Paxos, where log entries can be committed out of order or "holes" can appear in the log, Raft ensures that logs always remain a continuous prefix of the leader's log. This simplification reduces the number of potential states the system can be in, making it easier to verify and implement correctly.
+
+\subsection{Summary of Technical Differences}
+Table \ref{tab:paxos_raft_comparison} summarizes the key architectural differences between the two algorithms.
+
+\begin{table}[h]
+\centering
+\caption{Technical Comparison of Paxos and Raft Architectural Components.}
+\label{tab:paxos_raft_comparison}
+\begin{tabular}{|p{3cm}|p{5cm}|p{5cm}|}
+\hline
+\textbf{Feature} & \textbf{Paxos (Multi-Paxos)} & \textbf{Raft} \\ \hline
+\textbf{Leader Role} & Weak/Implicit; multiple leaders can coexist (dueling). & Strong/Explicit; only one leader per term. \\ \hline
+\textbf{Log Flow} & Symmetric; values can flow to any slot in any order. & Unidirectional; log entries only flow from leader to followers. \\ \hline
+\textbf{Safety Rule} & Based on complex overlaps of quorums and proposals. & Based on "Log Matching" and election restrictions. \\ \hline
+\textbf{State Space} & Large and difficult to reason about due to out-of-order entries. & Small and manageable through strict sequentiality. \\ \hline
+\textbf{Membership} & Usually requires a separate consensus process. & Integrated into the core log replication (Joint Consensus). \\ \hline
+\end{tabular}
+\end{table}
+
+The differences highlighted in Table \ref{tab:paxos_raft_comparison} explain why Raft has become the industry standard for new distributed systems. By prioritizing understandability and providing clear specifications for practical features like log compaction and membership changes, Raft reduced the "engineering malice" previously associated with building reliable state machines.
