@@ -10,15 +10,15 @@ def main():
     parser.add_argument('config', help='Path to cluster.json')
     
     # Raft Timeouts
-    parser.add_argument('--election-min', type=int, default=150, help='Minimum election timeout in ms (default: 150)')
-    parser.add_argument('--election-rand', type=int, default=150, help='Random jitter for election timeout in ms (default: 150)')
-    parser.add_argument('--heartbeat', type=int, default=50, help='Heartbeat interval in ms (default: 50)')
+    parser.add_argument('--election-min', type=int, default=800, help='Minimum election timeout in ms (default: 150)')
+    parser.add_argument('--election-rand', type=int, default=600, help='Random jitter for election timeout in ms (default: 150)')
+    parser.add_argument('--heartbeat', type=int, default=100, help='Heartbeat interval in ms (default: 50)')
     
     # RSM Timeouts
     parser.add_argument('--submit-timeout', type=int, default=10, help='RSM submit timeout in seconds (default: 10)')
     
     # Persistence
-    parser.add_argument('--max-raft-state', type=int, default=1000000, help='Snapshot when persist size exceeds this in bytes (default: 1000000)')
+    parser.add_argument('--max-raft-state', type=int, default=100000, help='Snapshot when persist size exceeds this in bytes (default: 100000)')
     
     # gRPC/Network Settings
     parser.add_argument('--grpc-base-delay', type=int, default=100, help='gRPC base backoff delay in ms (default: 100)')
