@@ -115,9 +115,9 @@ The cluster behavior can be customized during the setup phase using command-line
 | Argument | Description | Default | Environment Variable |
 |----------|-------------|---------|----------------------|
 | `config` | **(Required)** Path to `cluster.json` topology. | N/A | `CONFIG_PATH` |
-| `--election-min` | Minimum election timeout (ms). | `150` | `RAFT_ELECTION_TIMEOUT_MIN` |
-| `--election-rand` | Random jitter for election timeout (ms). | `150` | `RAFT_ELECTION_TIMEOUT_RAND` |
-| `--heartbeat` | Heartbeat interval (ms). | `50` | `RAFT_HEARTBEAT_TIMEOUT` |
+| `--election-min` | Minimum election timeout (ms). | `800` | `RAFT_ELECTION_TIMEOUT_MIN` |
+| `--election-rand` | Random jitter for election timeout (ms). | `600` | `RAFT_ELECTION_TIMEOUT_RAND` |
+| `--heartbeat` | Heartbeat interval (ms). | `100` | `RAFT_HEARTBEAT_TIMEOUT` |
 | `--submit-timeout` | RSM command commit timeout (seconds). | `10` | `RSM_SUBMIT_TIMEOUT` |
 | `--metrics-port-base`| Base port for Prometheus metrics. | `8080` | `METRICS_PORT_BASE` |
 | `--clerk-rpc-timeout`| Clerk RPC call timeout (seconds). | `5` | `CLERK_RPC_TIMEOUT` |
@@ -155,6 +155,27 @@ This setting determines when a node "compacts" its log by taking a snapshot.
 ### Raft Timeouts
 - **Stability**: If you see frequent leader changes in your logs without node failures, your `election-min` might be too low or your network latency too high. Increase these values to make the cluster more "stubborn."
 - **Recovery Speed**: Lower values make the cluster detect failures faster, but increase the risk of "split-brain" elections where no leader is chosen because everyone timed out at once. Always keep `election-rand` significant enough to prevent this.
+
+### Benchmarks
+
+The following throughput benchmarks were obtained using `ghz` on a single machine (Arch Linux, 16 Cores, 16GB RAM) running the cluster. The leader was kept stable during the test.
+
+**Optimal Configuration:**
+```bash
+--election-min 800 --election-rand 600 --heartbeat 100 --max-raft-state 100000
+```
+
+**Test Command:**
+```bash
+ghz --proto ./proto/kv.proto --call kvraft.kv.v1.KV/Put --data '{"key":"a","value":"b"}' --insecure --concurrency 10 --duration 200s localhost:8001
+```
+
+**Results:**
+- **Requests/sec:** 216.72
+- **Average Latency:** 45.95 ms
+- **99th Percentile Latency:** 121.63 ms
+
+*Note: Increasing concurrency or duration beyond these settings did not significantly alter the throughput.*
 
 ---
 
@@ -203,7 +224,7 @@ Once your data sources are connected, you can create a dashboard and query the c
 To demonstrate the fault tolerance of the Raft cluster in real-time, you can use the provided `chaos_monkey.py` script. This script acts as an automated chaos engineer, randomly injecting faults into the running cluster while ensuring a majority of nodes remain active so the cluster can continue to serve requests.
 
 ### How it Works
-The script randomly selects 1 or 2 nodes (to preserve the majority in a 5-node cluster) every 15-30 seconds and performs one of the following actions:
+The script dynamically selects the number of nodes to fail based on the total cluster size (e.g., up to 5 nodes in an 11-node cluster), ensuring a majority always remains active. It performs one of the following actions every 15-30 seconds:
 - **Stop**: Simulates a complete node crash. The node process dies.
 - **Pause**: Simulates a network partition, severe CPU starvation, or a long GC pause. The node process remains alive but cannot communicate with peers or process timers.
 
