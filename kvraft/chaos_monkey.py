@@ -9,10 +9,8 @@ import argparse
 import json
 import os
 
-# Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-# Globals to be populated from config
 NODES = []
 MAX_FAILURES = 0 
 
@@ -20,7 +18,7 @@ def run_cmd(cmd):
     try:
         subprocess.run(cmd, shell=True, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError:
-        pass # Ignore errors during cleanup or if container is already in target state
+        pass
 
 def cleanup(sig, frame):
     print("\n")
@@ -43,14 +41,9 @@ def load_config(config_path):
         if num_nodes == 0:
             logging.error(f"No nodes found in {config_path}")
             sys.exit(1)
-            
-        # Compose container names usually end up with node0, node1, etc.
-        # based on our docker-compose.yml service names
+
         NODES = [f"node{n['id']}" for n in nodes_data]
-        
-        # Calculate max failures to keep a majority
-        # Majority = (N // 2) + 1
-        # Max failures = N - Majority
+
         majority = (num_nodes // 2) + 1
         MAX_FAILURES = num_nodes - majority
         
@@ -67,12 +60,10 @@ def chaos_loop(min_downtime, max_downtime, min_interval, max_interval):
     logging.info("Press Ctrl+C to stop and restore all nodes.")
     
     while True:
-        # Wait a bit before the next chaos event
         interval = random.randint(min_interval, max_interval)
         logging.info(f"Waiting for {interval} seconds before next event...")
         time.sleep(interval)
         
-        # If MAX_FAILURES is 0 (e.g. 1 node or 2 node cluster), we can't safely inject failures and keep majority
         if MAX_FAILURES < 1:
             logging.warning("Cluster too small to inject failures while maintaining a majority. Skipping.")
             continue
@@ -80,7 +71,6 @@ def chaos_loop(min_downtime, max_downtime, min_interval, max_interval):
         num_nodes_to_affect = random.randint(1, MAX_FAILURES)
         target_nodes = random.sample(NODES, num_nodes_to_affect)
         
-        # We can either stop (crash) or pause (network partition/CPU starvation)
         action = random.choice(["stop", "pause"])
         
         if action == "stop":
@@ -120,11 +110,9 @@ if __name__ == "__main__":
     
     load_config(args.config)
 
-    # Register signals after NODES are loaded so cleanup works correctly
     signal.signal(signal.SIGINT, cleanup)
     signal.signal(signal.SIGTERM, cleanup)
 
-    # Ensure all nodes are clean before starting
     logging.info("Ensuring all nodes are running before starting chaos...")
     for node in NODES:
         run_cmd(f"docker-compose unpause {node}")

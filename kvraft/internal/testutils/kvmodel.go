@@ -10,7 +10,7 @@ import (
 )
 
 type KvInput struct {
-	Op      uint8 // 0 => get, 1 => put
+	Op      uint8 // 0 - get, 1 - put
 	Key     string
 	Value   string
 	Version uint64
@@ -46,8 +46,6 @@ var KvModel = porcupine.Model{
 		return ret
 	},
 	Init: func() any {
-		// note: we are modeling a single key's value here;
-		// we're partitioning by key, so this is okay
 		return KvState{Value: "", Version: 0}
 	},
 	Step: func(state, input, output any) (bool, any) {
@@ -56,15 +54,15 @@ var KvModel = porcupine.Model{
 		st := state.(KvState)
 
 		switch inp.Op {
-		case 0: // get
+		case 0:
 			if out.Err == string(api.OK) {
 				return out.Value == st.Value && out.Version == st.Version, st
 			}
 			if out.Err == string(api.ErrNoKey) {
 				return st.Version == 0, st
 			}
-			return true, st // For other errors like ErrWrongLeader, we can't say much
-		case 1: // put
+			return true, st
+		case 1:
 			if out.Err == string(api.OK) {
 				if st.Version == inp.Version {
 					return true, KvState{Value: inp.Value, Version: st.Version + 1}
@@ -77,7 +75,6 @@ var KvModel = porcupine.Model{
 			}
 
 			if out.Err == string(api.ErrMaybe) {
-				// If it's Maybe, it might have happened or not
 				if st.Version == inp.Version {
 					return true, KvState{Value: inp.Value, Version: st.Version + 1}
 				}

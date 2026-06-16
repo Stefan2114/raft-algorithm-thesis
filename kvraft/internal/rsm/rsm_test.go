@@ -13,7 +13,6 @@ import (
 )
 
 func TestRSM_SubmitSuccess(t *testing.T) {
-	// Prevent MakeRSM from instantiating the real Raft
 	useRaftStateMachine = true
 	defer func() { useRaftStateMachine = false }()
 

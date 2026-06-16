@@ -116,7 +116,6 @@ func (c *kvCluster) get(id int, req api.GetArgs, clientId int) (api.Err, api.Get
 func TestKV_Partition(t *testing.T) {
 	c := makeKVCluster(3, -1)
 
-	// Wait for leader
 	leader := -1
 	for i := 0; i < 10; i++ {
 		leader = c.findLeader()
@@ -132,7 +131,6 @@ func TestKV_Partition(t *testing.T) {
 	err1, _ := c.submit(leader, req1, 0)
 	assert.Equal(t, api.OK, err1, "Put failed")
 
-	// Partition leader
 	other1 := (leader + 1) % 3
 	other2 := (leader + 2) % 3
 	c.net.Disconnect(leader, other1)
@@ -140,7 +138,6 @@ func TestKV_Partition(t *testing.T) {
 	c.net.Disconnect(other1, leader)
 	c.net.Disconnect(other2, leader)
 
-	// Submit to minority (leader), should fail or timeout
 	req2 := api.PutArgs{Key: "k1", Value: "v2", Version: 1}
 	done := make(chan bool)
 	go func() {
@@ -156,10 +153,8 @@ func TestKV_Partition(t *testing.T) {
 	case success := <-done:
 		assert.True(t, success, "Put in minority should have failed or timed out")
 	case <-time.After(1 * time.Second):
-		// Expected timeout
 	}
 
-	// Other partition should elect new leader and progress
 	newLeader := -1
 	for i := 0; i < 20; i++ {
 		if _, isLeader := c.rafts[other1].State(); isLeader {
@@ -178,7 +173,6 @@ func TestKV_Partition(t *testing.T) {
 	err3, _ := c.submit(newLeader, req3, 0)
 	assert.Equal(t, api.OK, err3, "Put in majority failed")
 
-	// Heal partition
 	c.net.Connect(leader, other1)
 	c.net.Connect(leader, other2)
 	c.net.Connect(other1, leader)
@@ -186,7 +180,6 @@ func TestKV_Partition(t *testing.T) {
 
 	time.Sleep(1 * time.Second)
 
-	// Verify progress continues
 	req4 := api.PutArgs{Key: "k1", Value: "v4", Version: 2}
 	err4, _ := c.submit(newLeader, req4, 0)
 	assert.Equal(t, api.OK, err4, "Put after heal failed")

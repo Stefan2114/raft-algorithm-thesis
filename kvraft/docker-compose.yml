@@ -9,6 +9,7 @@ services:
     environment:
       - NODE_ID=0
       - CONFIG_PATH=/app/cluster.json
+      - RAFT_DEBUG=true
       - DATA_DIR=/data
       - LOG_PATH=/logs/node0.log
       - RAFT_ELECTION_TIMEOUT_MIN=800
@@ -35,6 +36,7 @@ services:
     environment:
       - NODE_ID=1
       - CONFIG_PATH=/app/cluster.json
+      - RAFT_DEBUG=true
       - DATA_DIR=/data
       - LOG_PATH=/logs/node1.log
       - RAFT_ELECTION_TIMEOUT_MIN=800
@@ -61,6 +63,7 @@ services:
     environment:
       - NODE_ID=2
       - CONFIG_PATH=/app/cluster.json
+      - RAFT_DEBUG=true
       - DATA_DIR=/data
       - LOG_PATH=/logs/node2.log
       - RAFT_ELECTION_TIMEOUT_MIN=800
@@ -87,6 +90,7 @@ services:
     environment:
       - NODE_ID=3
       - CONFIG_PATH=/app/cluster.json
+      - RAFT_DEBUG=true
       - DATA_DIR=/data
       - LOG_PATH=/logs/node3.log
       - RAFT_ELECTION_TIMEOUT_MIN=800
@@ -113,6 +117,7 @@ services:
     environment:
       - NODE_ID=4
       - CONFIG_PATH=/app/cluster.json
+      - RAFT_DEBUG=true
       - DATA_DIR=/data
       - LOG_PATH=/logs/node4.log
       - RAFT_ELECTION_TIMEOUT_MIN=800

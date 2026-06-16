@@ -5,16 +5,9 @@ import (
 )
 
 type Raft interface {
-	// Start agreement on a new log entry, and return the log index
-	// for that entry, the term, and whether the peer is the leader.
 	Start(command any) (int, int, bool)
-
-	// Ask a Raft for its current term, and whether it thinks it is leader
 	State() (int, bool)
-
-	// returns the id of the current leader, or -1 if no leader is known.
 	Leader() int
-
 	Snapshot(index int, snapshot []byte)
 	PersistBytes() int
 	Kill()
