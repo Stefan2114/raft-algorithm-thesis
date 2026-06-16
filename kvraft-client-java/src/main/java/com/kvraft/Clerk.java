@@ -17,9 +17,6 @@ import java.util.function.Function;
 
 import javax.annotation.Nonnull;
 
-/**
- * An industry-standard, asynchronous gRPC client for the KVRaft cluster.
- */
 public class Clerk implements AutoCloseable {
     private final List<ManagedChannel> channels;
     private final List<KVGrpc.KVFutureStub> stubs;
@@ -40,9 +37,6 @@ public class Clerk implements AutoCloseable {
         }
     }
 
-    /**
-     * Get the value associated with a key.
-     */
     public CompletableFuture<GetResult> get(String key) {
         GetRequest request = GetRequest.newBuilder()
                 .setKey(key)
@@ -59,9 +53,6 @@ public class Clerk implements AutoCloseable {
                 });
     }
 
-    /**
-     * Put a value into the KV store.
-     */
     public CompletableFuture<Void> put(String key, String value, long version) {
         PutRequest request = PutRequest.newBuilder()
                 .setKey(key)
@@ -77,9 +68,6 @@ public class Clerk implements AutoCloseable {
                 });
     }
 
-    /**
-     * Internal retry mechanism for finding the leader and handling network blips.
-     */
     private <T> CompletableFuture<T> callWithRetry(Function<KVGrpc.KVFutureStub, ListenableFuture<T>> rpcCall, int serverIndex, int attempt, boolean potentiallyProcessed) {
         CompletableFuture<T> result = new CompletableFuture<>();
         KVGrpc.KVFutureStub stub = stubs.get(serverIndex);
@@ -106,7 +94,6 @@ public class Clerk implements AutoCloseable {
 
             @Override
             public void onFailure(@Nonnull Throwable t) {
-                // If we fail with a network error/timeout, we don't know if the request was processed
                 retry((serverIndex + 1) % totalNodes, true);
             }
 

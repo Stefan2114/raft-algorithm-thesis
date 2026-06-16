@@ -51,7 +51,6 @@ func setupTestCluster(t *testing.T, nNodes int, basePort int, maxRaftState int) 
 		}
 	})
 
-	// Wait for leader election
 	time.Sleep(2 * time.Second)
 	return cfg, nodes, tempDir
 }

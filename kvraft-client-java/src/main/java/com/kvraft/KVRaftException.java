@@ -2,9 +2,6 @@ package com.kvraft;
 
 import com.kvraft.kv.v1.Status;
 
-/**
- * Exception thrown when the KVRaft cluster returns a domain error.
- */
 public class KVRaftException extends RuntimeException {
     private final Status status;
 

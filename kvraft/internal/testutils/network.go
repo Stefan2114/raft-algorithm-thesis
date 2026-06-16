@@ -109,7 +109,6 @@ func (n *Network) Call(from int, to int, method string, args any, reply any) boo
 		time.Sleep(time.Duration(rand.Intn(maxDelay)) * time.Millisecond)
 	}
 
-	// Deep copy args using gob to simulate network serialization
 	var buf bytes.Buffer
 	enc := gob.NewEncoder(&buf)
 	if err := enc.Encode(args); err != nil {
@@ -128,7 +127,6 @@ func (n *Network) Call(from int, to int, method string, args any, reply any) boo
 		return false
 	}
 
-	// Make the method call via reflection
 	dot := strings.LastIndex(method, ".")
 	methodName := method
 	if dot >= 0 {
@@ -140,8 +138,6 @@ func (n *Network) Call(from int, to int, method string, args any, reply any) boo
 		return false
 	}
 
-	// We pass arguments as (args, reply)
-	// Some Raft methods take (*Args, *Reply)
 	in := []reflect.Value{reflect.ValueOf(newArgs), reflect.ValueOf(reply)}
 	methodValue.Call(in)
 

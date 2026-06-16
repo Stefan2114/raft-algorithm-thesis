@@ -72,9 +72,6 @@ func (rsm *RSM) Raft() raft.Raft {
 	return rsm.rf
 }
 
-// Submit a command to Raft, and wait for it to be committed.  It
-// should return ErrWrongLeader if client should find new leader and
-// try again.
 func (rsm *RSM) Submit(req any) (api.Err, any) {
 
 	id := randValue()

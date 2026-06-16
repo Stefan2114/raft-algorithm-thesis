@@ -32,6 +32,9 @@ def main():
     # Metrics
     parser.add_argument('--metrics-port-base', type=int, default=8080, help='Base port for Prometheus metrics (default: 8080)')
 
+    # Logging
+    parser.add_argument('--raft-debug', type=str, default='true', choices=['true', 'false'], help='Enable Raft debug logging (default: true)')
+
     args = parser.parse_args()
 
     try:
@@ -64,6 +67,7 @@ def main():
     environment:
       - NODE_ID={node_id}
       - CONFIG_PATH=/app/cluster.json
+      - RAFT_DEBUG={args.raft_debug}
       - DATA_DIR=/data
       - LOG_PATH=/logs/node{node_id}.log
       - RAFT_ELECTION_TIMEOUT_MIN={args.election_min}
@@ -130,7 +134,6 @@ def main():
 
     print(f"Successfully generated {compose_file} for {num_nodes} nodes using config {args.config}")
 
-    # Generate Monitoring Configs
     os.makedirs("config", exist_ok=True)
 
     prometheus_targets = []
@@ -175,7 +178,6 @@ scrape_configs:
 
     print("Successfully generated config/prometheus.yml and config/promtail-config.yml")
 
-    # Generate Grafana Provisioning
     os.makedirs("config/grafana/provisioning/datasources", exist_ok=True)
     os.makedirs("config/grafana/provisioning/dashboards", exist_ok=True)
     os.makedirs("config/grafana/dashboards", exist_ok=True)
@@ -206,11 +208,6 @@ providers:
     options:
       path: /etc/grafana/provisioning/dashboards
 """
-    # TODO: We point to /etc/grafana/provisioning/dashboards inside the container
-    # and we will mount our local config/grafana/dashboards to it if we want persistent JSONs,
-    # but for now, we'll just allow provisioning from the folder we mounted.
-    
-    # Actually, let's fix the path in dashboards.yaml to point to where we will put JSONs.
     grafana_dashboards_yml = """apiVersion: 1
 providers:
   - name: 'Default'

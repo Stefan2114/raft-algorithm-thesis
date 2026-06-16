@@ -2,7 +2,7 @@ package sm
 
 type Op struct {
 	Me  int
-	Id  int64 // Unique ID to match Submit with the applied result
+	Id  int64
 	Req any
 }
 

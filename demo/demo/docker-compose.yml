@@ -1,0 +1,102 @@
+version: '3.8'
+
+services:
+  client0:
+    build: .
+    network_mode: "host"
+    environment:
+      - INSTANCE_ID=client-instance-0
+      - INPUT_PATH=/shared/input.txt
+      - OUTPUT_PATH=/shared/output.txt
+    volumes:
+      - ./shared:/shared
+
+  client1:
+    build: .
+    network_mode: "host"
+    environment:
+      - INSTANCE_ID=client-instance-1
+      - INPUT_PATH=/shared/input.txt
+      - OUTPUT_PATH=/shared/output.txt
+    volumes:
+      - ./shared:/shared
+
+  client2:
+    build: .
+    network_mode: "host"
+    environment:
+      - INSTANCE_ID=client-instance-2
+      - INPUT_PATH=/shared/input.txt
+      - OUTPUT_PATH=/shared/output.txt
+    volumes:
+      - ./shared:/shared
+
+  client3:
+    build: .
+    network_mode: "host"
+    environment:
+      - INSTANCE_ID=client-instance-3
+      - INPUT_PATH=/shared/input.txt
+      - OUTPUT_PATH=/shared/output.txt
+    volumes:
+      - ./shared:/shared
+
+  client4:
+    build: .
+    network_mode: "host"
+    environment:
+      - INSTANCE_ID=client-instance-4
+      - INPUT_PATH=/shared/input.txt
+      - OUTPUT_PATH=/shared/output.txt
+    volumes:
+      - ./shared:/shared
+
+  client5:
+    build: .
+    network_mode: "host"
+    environment:
+      - INSTANCE_ID=client-instance-5
+      - INPUT_PATH=/shared/input.txt
+      - OUTPUT_PATH=/shared/output.txt
+    volumes:
+      - ./shared:/shared
+
+  client6:
+    build: .
+    network_mode: "host"
+    environment:
+      - INSTANCE_ID=client-instance-6
+      - INPUT_PATH=/shared/input.txt
+      - OUTPUT_PATH=/shared/output.txt
+    volumes:
+      - ./shared:/shared
+
+  client7:
+    build: .
+    network_mode: "host"
+    environment:
+      - INSTANCE_ID=client-instance-7
+      - INPUT_PATH=/shared/input.txt
+      - OUTPUT_PATH=/shared/output.txt
+    volumes:
+      - ./shared:/shared
+
+  client8:
+    build: .
+    network_mode: "host"
+    environment:
+      - INSTANCE_ID=client-instance-8
+      - INPUT_PATH=/shared/input.txt
+      - OUTPUT_PATH=/shared/output.txt
+    volumes:
+      - ./shared:/shared
+
+  client9:
+    build: .
+    network_mode: "host"
+    environment:
+      - INSTANCE_ID=client-instance-9
+      - INPUT_PATH=/shared/input.txt
+      - OUTPUT_PATH=/shared/output.txt
+    volumes:
+      - ./shared:/shared

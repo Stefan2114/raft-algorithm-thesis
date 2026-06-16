@@ -161,9 +161,10 @@ func (rf *Raft) genInstallSnapshotArgs() *raft.InstallSnapshotArgs {
 func (rf *Raft) truncateLogWithSnapshot(index int, term int) {
 
 	if index < rf.getLen() && rf.getLog(index).Term == term {
-		// We have the entry. Slice it so that the entry at LastIncludedIndex is at physical index 0
 		rf.logs = append([]raft.Entry{}, rf.logs[rf.getPhysicalIndex(index):]...)
-	} else {
-		rf.logs = []raft.Entry{{Index: index, Term: term}}
+		return
 	}
+
+	rf.logs = []raft.Entry{{Index: index, Term: term}}
+
 }

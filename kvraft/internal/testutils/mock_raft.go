@@ -5,7 +5,6 @@ import (
 	"sync"
 )
 
-// MockRaft simulates a Raft instance that immediately commits whatever is Started.
 type MockRaft struct {
 	mu            sync.Mutex
 	me            int

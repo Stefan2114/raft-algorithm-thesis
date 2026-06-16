@@ -10,7 +10,6 @@ import (
 
 const rpcTimeout = 2 * time.Second
 
-// GRPCClient implements raft.Transport using a Raft gRPC client stub.
 type GRPCClient struct {
 	Raft kvpb.RaftClient
 }

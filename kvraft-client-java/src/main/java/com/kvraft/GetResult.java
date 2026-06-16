@@ -1,8 +1,5 @@
 package com.kvraft;
 
-/**
- * Represents the result of a Get operation from the KVRaft cluster.
- */
 public final class GetResult {
     private final String value;
     private final long version;

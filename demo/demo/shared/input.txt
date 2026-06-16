@@ -1,0 +1,2 @@
+Raft thesis project: Distributed Lock Demo Secret Content!
+This line must be appended exactly 10 times by the 10 concurrent clients.
