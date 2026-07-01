@@ -12,14 +12,14 @@ The system is organized around the **Replicated State Machine (RSM)** architectu
 
 ### Repository Structure
 
--   [kvraft](file:///home/stefff/workspace/projects/go-projects/raft-algorithm-thesis/kvraft): The Go core implementation containing:
+-   [kvraft](raft-algorithm-thesis/kvraft): The Go core implementation containing:
     -   **Raft Engine**: Consensus logic, leader elections, and log replication.
     -   **Replicated State Machine (RSM)**: Decouples Raft consensus from the application state database.
     -   **KV Server**: gRPC server handling consensus coordination.
     -   **Clerk (Go SDK & CLI)**: Client library supporting automatic leader discovery and failovers.
     -   **Chaos Monkey**: Automated script to simulate cluster failures and partition events.
--   [kvraft-client-java](file:///home/stefff/workspace/projects/go-projects/raft-algorithm-thesis/kvraft-client-java): An asynchronous Java client SDK built on `CompletableFuture` for interacting with the Go KV cluster.
--   [proto](file:///home/stefff/workspace/projects/go-projects/raft-algorithm-thesis/proto): Shared Protocol Buffer definitions (`kv.proto`, `raft.proto`) defining client APIs and consensus RPCs.
+-   [kvraft-client-java](raft-algorithm-thesis/kvraft-client-java): An asynchronous Java client SDK built on `CompletableFuture` for interacting with the Go KV cluster.
+-   [proto](raft-algorithm-thesis/proto): Shared Protocol Buffer definitions (`kv.proto`, `raft.proto`) defining client APIs and consensus RPCs.
 
 ---
 
@@ -39,8 +39,8 @@ Located in `kvraft/internal/rsm`, the RSM layer acts as a buffer between the con
 
 ### 3. gRPC & Cross-Language Interoperability
 Using **gRPC** over Protocol Buffers (`proto/`) decouples client SDKs from the server's internal language:
-*   [proto/kv.proto](file:///home/stefff/workspace/projects/go-projects/raft-algorithm-thesis/proto/kv.proto) defines the client API (`Get` and `Put` operations).
-*   [proto/raft.proto](file:///home/stefff/workspace/projects/go-projects/raft-algorithm-thesis/proto/raft.proto) defines internal peer-to-peer RPCs (`RequestVote`, `AppendEntries`, and `InstallSnapshot`).
+*   [proto/kv.proto](raft-algorithm-thesis/proto/kv.proto) defines the client API (`Get` and `Put` operations).
+*   [proto/raft.proto](raft-algorithm-thesis/proto/raft.proto) defines internal peer-to-peer RPCs (`RequestVote`, `AppendEntries`, and `InstallSnapshot`).
 *   This makes it easy to write clients in multiple languages (such as Java, Go, or Python) that communicate transparently with the Go cluster.
 
 ---
@@ -54,7 +54,7 @@ Using **gRPC** over Protocol Buffers (`proto/`) decouples client SDKs from the s
 -   **Protocol Buffers Compiler (`protoc`)**
 
 ### 1. Compile Protobuf Definitions
-To generate or update client and server RPC stubs from the shared [proto](file:///home/stefff/workspace/projects/go-projects/raft-algorithm-thesis/proto) definitions:
+To generate or update client and server RPC stubs from the shared [proto](raft-algorithm-thesis/proto) definitions:
 ```bash
 # Generate Go code (run from workspace root)
 protoc --go_out=kvraft --go_opt=module=kvraft --go-grpc_out=kvraft --go-grpc_opt=module=kvraft proto/raft.proto proto/kv.proto
